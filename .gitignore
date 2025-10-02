@@ -5,3 +5,8 @@ py/__pycache__/
 map/*
 output/*
 plots/*
+
+# OS
+.DS_Store
+
+.venv/
