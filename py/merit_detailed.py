@@ -17,7 +17,7 @@ from config import *
 
 
 def split_catchment(wid: str, basin: int, lat: float, lng: float, catchment_poly: Polygon,
-                    bSingleCatchment: bool) -> (object or None, float, float):
+                    bSingleCatchment: bool, upstream_area: float = None) -> (object or None, float, float):
     """
     Performs the detailed pixel-scale raster-based delineation for a watershed.
 
@@ -182,17 +182,27 @@ def split_catchment(wid: str, basin: int, lat: float, lng: float, catchment_poly
 
     # Snap the outlet to the nearest stream. This function depends entirely on the threshold
     # that you set for how minimum number of upstream pixels to define a waterway.
-    # If the user is looking for a small headwater stream, we can use a small number.
-    # In this case, there will be only one unit catchment in the watershed.
-    # In most other circumstances (num unit catchments > 1), a much larger value gives better results.
-    # The values here work OK, but I did not test very extensively...
-    # Using a minimum value like 500 prevents the script from finding little tiny watersheds.
-    if bSingleCatchment:
-        numpixels = THRESHOLD_SINGLE
+    # Use dynamic threshold based on watershed size (upstream area) if available,
+    # otherwise fall back to the old logic based on number of unit catchments.
+    if upstream_area is not None:
+        # Dynamic threshold based on watershed area (km²)
+        # Small watersheds need lower thresholds to find the stream
+        if upstream_area < 50:
+            numpixels = 300  # Very small catchments
+        elif upstream_area < 200:
+            numpixels = 500  # Small catchments
+        elif upstream_area < 1000:
+            numpixels = 1000  # Medium catchments
+        elif upstream_area < 5000:
+            numpixels = 2000  # Large catchments
+        else:
+            numpixels = 5000  # Very large catchments
     else:
-        # Case where there are 2 or more unit catchments in the watershed
-        # setting this value too low causes incorrect results and weird topology problems in the output
-        numpixels = THRESHOLD_MULTIPLE
+        # Fallback to old logic based on number of unit catchments
+        if bSingleCatchment:
+            numpixels = THRESHOLD_SINGLE
+        else:
+            numpixels = THRESHOLD_MULTIPLE
 
     if VERBOSE: print("Using threshold of {} for number of upstream pixels.".format(numpixels))
 

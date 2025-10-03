@@ -47,8 +47,6 @@ if HIGH_RES:
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-gpd.options.use_pygeos = True
-
 # The WGS84 projection string, used in a few places
 PROJ_WGS84 = 'EPSG:4326'
 
@@ -265,6 +263,7 @@ def delineate():
         else:
             plt.title(f"Found {len(subbasins_gdf)} unit catchments for watershed id = {wid}")
 
+        os.makedirs("plots", exist_ok=True)
         plt.savefig(f"plots/{wid}_vector_unit_catchments_{suffix}.png")
         plt.close(fig)
 
@@ -496,7 +495,8 @@ def delineate():
                 bSingleCatchment = len(B) == 1
                 split_catchment_poly, lat_snap, lng_snap = py.merit_detailed.split_catchment(wid, basin, lat, lng,
                                                                                              catchment_poly,
-                                                                                             bSingleCatchment)
+                                                                                             bSingleCatchment,
+                                                                                             up_area)
                 if split_catchment_poly is None:
                     failed[wid] = "An error occured in pysheds detailed delineation."
                     continue
@@ -721,9 +721,10 @@ def save_pickle(geotype: str, gdf: gpd.GeoDataFrame, basin: int, high_resolution
         if not os.path.isfile(pickle_fname):
             if VERBOSE: print(f"Saving GeoDataFrame to pickle file: {pickle_fname}")
             try:
+                os.makedirs(os.path.dirname(pickle_fname), exist_ok=True)
                 pickle.dump(gdf, open(pickle_fname, "wb"))
-            except:
-                raise Warning("Could not save pickle file to: {pickle_fname}")
+            except (OSError, IOError) as e:
+                raise Warning(f"Could not save pickle file to: {pickle_fname}") from e
 
 
 if __name__ == "__main__":

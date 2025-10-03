@@ -10,7 +10,7 @@ outside of the sample data provided for Iceland.
 """
 
 # Path to your CSV file with the watershed outlet data
-OUTLETS_CSV = 'outlets_sample.csv'
+OUTLETS_CSV = 'data/gauge_data/kazakhstan/kazakhstan_gauge_outlets.csv'
 
 # Set to True for "higher resolution" mode or False for "lower resolution."
 HIGH_RES = True
@@ -29,7 +29,7 @@ VERBOSE = True
 
 # Set to True to make a bunch of plots of each watershed.
 # (Just for debugging. Slows down the script a lot.)
-PLOTS = True
+PLOTS = False
 
 # Folder where you have stored the Merit-BASINS catchment shapefiles.
 # These files need to be downloaded from: https://www.reachhydro.org/home/params/merit-basins
@@ -41,10 +41,10 @@ LOWRES_CATCHMENTS_DIR = "data/shp/catchments_simplified"
 
 # Folder where you have stored the MERIT-Basins River flowline shapefiles
 # Download from: https://www.reachhydro.org/home/params/merit-basins
-RIVERS_DIR = "C:/Data/GIS/MERITBasins/rivers"
+RIVERS_DIR = "data/shp/merit_rivers"
 
 # Folder where the script will write the output GeoJSON files or shapefiles
-OUTPUT_DIR = "output"
+OUTPUT_DIR = "output/kazakhstan"
 
 # The file extension will determine the types of geodata files the script creates.
 #   "gpkg" for GeoPackage (recommended)
@@ -67,12 +67,13 @@ OUTPUT_CSV = True
 PICKLE_DIR = 'pkl'
 
 # Threshold for watershed size in km² above which the script will revert to
-# low-resolution mode 
-LOW_RES_THRESHOLD = 50000
+# low-resolution mode
+LOW_RES_THRESHOLD = 999999999
 
-# If the requested watershed outlet is not inside a catchment, how far away 
+# If the requested watershed outlet is not inside a catchment, how far away
 # from the point should we look for the nearest catchment (in degrees). 0.025 recommended
-SEARCH_DIST = 0
+# ~1 km at mid-latitudes (1° ≈ 111 km)
+SEARCH_DIST = 0.009
 
 # Watersheds created with Merit-Hydro data tend to have many "donut holes"
 # ranging from one or two pixels to much larger.
