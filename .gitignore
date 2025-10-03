@@ -10,3 +10,5 @@ plots/*
 .DS_Store
 
 .venv/
+
+data/
