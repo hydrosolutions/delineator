@@ -268,17 +268,18 @@ output_dir/
 │       └── accum{basin}.tif
 └── shp/
     ├── merit_catchments/
-    │   └── cat_pfaf_{basin}/
-    │       ├── cat_pfaf_{basin}_MERIT_Hydro_v07_Basins_v01.shp
-    │       ├── cat_pfaf_{basin}_MERIT_Hydro_v07_Basins_v01.shx
-    │       ├── cat_pfaf_{basin}_MERIT_Hydro_v07_Basins_v01.dbf
-    │       └── cat_pfaf_{basin}_MERIT_Hydro_v07_Basins_v01.prj
+    │   ├── cat_pfaf_{basin}_MERIT_Hydro_v07_Basins_v01.shp
+    │   ├── cat_pfaf_{basin}_MERIT_Hydro_v07_Basins_v01.shx
+    │   ├── cat_pfaf_{basin}_MERIT_Hydro_v07_Basins_v01.dbf
+    │   └── cat_pfaf_{basin}_MERIT_Hydro_v07_Basins_v01.prj
     ├── merit_rivers/
-    │   └── riv_pfaf_{basin}/
-    │       └── [similar to catchments]
+    │   ├── riv_pfaf_{basin}_MERIT_Hydro_v07_Basins_v01.shp
+    │   └── [similar to catchments]
     └── catchments_simplified/
         └── catchments_simplified.zip
 ```
+
+Note: Shapefile components are stored directly in `merit_catchments/` and `merit_rivers/` directories (no subdirectories per basin).
 
 ## Usage Examples
 

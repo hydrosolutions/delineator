@@ -132,20 +132,41 @@ class TestBasinSelector:
             assert basins == [27]
 
     def test_get_basins_for_bbox_invalid_coords(self) -> None:
-        """Should raise ValueError if min > max."""
-        # min_lon > max_lon
+        """Should raise ValueError if min > max (inverted bbox)."""
+        # min_lon > max_lon (inverted)
         with pytest.raises(ValueError) as exc_info:
             get_basins_for_bbox(min_lon=10, min_lat=0, max_lon=5, max_lat=10)
 
         assert "min_lon" in str(exc_info.value)
         assert "max_lon" in str(exc_info.value)
 
-        # min_lat > max_lat
+        # min_lat > max_lat (inverted)
         with pytest.raises(ValueError) as exc_info:
             get_basins_for_bbox(min_lon=0, min_lat=20, max_lon=10, max_lat=10)
 
         assert "min_lat" in str(exc_info.value)
         assert "max_lat" in str(exc_info.value)
+
+    def test_get_basins_for_bbox_point_query(self, mock_iceland_basins_gdf: gpd.GeoDataFrame) -> None:
+        """Single point query should work by applying buffer."""
+        with patch("delineator.download.basin_selector._load_basins_gdf", return_value=mock_iceland_basins_gdf):
+            # Point inside Iceland bbox (both coords equal)
+            basins = get_basins_for_bbox(min_lon=-19, min_lat=65, max_lon=-19, max_lat=65)
+            assert basins == [27]
+
+    def test_get_basins_for_bbox_vertical_line(self, mock_iceland_basins_gdf: gpd.GeoDataFrame) -> None:
+        """Vertical line query (same longitude) should work."""
+        with patch("delineator.download.basin_selector._load_basins_gdf", return_value=mock_iceland_basins_gdf):
+            # Same longitude, different latitudes
+            basins = get_basins_for_bbox(min_lon=-19, min_lat=64, max_lon=-19, max_lat=66)
+            assert basins == [27]
+
+    def test_get_basins_for_bbox_horizontal_line(self, mock_iceland_basins_gdf: gpd.GeoDataFrame) -> None:
+        """Horizontal line query (same latitude) should work."""
+        with patch("delineator.download.basin_selector._load_basins_gdf", return_value=mock_iceland_basins_gdf):
+            # Same latitude, different longitudes
+            basins = get_basins_for_bbox(min_lon=-20, min_lat=65, max_lon=-18, max_lat=65)
+            assert basins == [27]
 
     def test_get_basins_for_bbox_no_intersection(self, mock_basins_gdf: gpd.GeoDataFrame) -> None:
         """Should return empty list when bbox doesn't intersect any basins."""
@@ -607,7 +628,8 @@ class TestDownloadIntegration:
         with (
             patch("delineator.download.downloader.get_basins_for_bbox", return_value=expected_basins),
             patch("delineator.download.http_client._download_file"),
-            patch("delineator.download.downloader.gdrive_download_basin_vectors", return_value={}),
+            patch("delineator.download.downloader.gdrive_download_catchments", return_value=tmp_path),
+            patch("delineator.download.downloader.gdrive_download_rivers", return_value=tmp_path),
         ):
             result = download_data(bbox=bbox, output_dir=tmp_path)
 

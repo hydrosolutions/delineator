@@ -161,9 +161,7 @@ class TestDownloadShapefileComponents:
         """Should download all shapefile components."""
         # Mock _find_file_id to return file IDs
         with (
-            patch(
-                "delineator.download.gdrive_client._find_file_id", return_value="mock_file_id"
-            ),
+            patch("delineator.download.gdrive_client._find_file_id", return_value="mock_file_id"),
             patch("delineator.download.gdrive_client._download_file") as mock_download,
         ):
             # Track downloaded files
@@ -192,9 +190,7 @@ class TestDownloadShapefileComponents:
     def test_renames_files_correctly(self, mock_service: MagicMock, temp_dest_dir: Path) -> None:
         """Downloaded files should be renamed to remove _bugfix1 suffix."""
         with (
-            patch(
-                "delineator.download.gdrive_client._find_file_id", return_value="mock_file_id"
-            ),
+            patch("delineator.download.gdrive_client._find_file_id", return_value="mock_file_id"),
             patch("delineator.download.gdrive_client._download_file") as mock_download,
         ):
 
@@ -303,9 +299,7 @@ class TestDownloadShapefileComponents:
             (temp_dest_dir / f"{target_base}{ext}").touch()
 
         with (
-            patch(
-                "delineator.download.gdrive_client._find_file_id", return_value="mock_file_id"
-            ),
+            patch("delineator.download.gdrive_client._find_file_id", return_value="mock_file_id"),
             patch("delineator.download.gdrive_client._download_file") as mock_download,
         ):
 
@@ -346,9 +340,7 @@ class TestDownloadCatchments:
             patch("delineator.download.gdrive_client._get_default_data_source", return_value=DataSource.BUGFIX1),
             patch("delineator.download.gdrive_client._get_credentials"),
             patch("delineator.download.gdrive_client._get_drive_service"),
-            patch(
-                "delineator.download.gdrive_client._download_shapefile_components"
-            ) as mock_components,
+            patch("delineator.download.gdrive_client._download_shapefile_components") as mock_components,
         ):
             mock_components.return_value = temp_dest_dir
 
@@ -376,9 +368,7 @@ class TestDownloadCatchments:
         with (
             patch("delineator.download.gdrive_client._get_credentials"),
             patch("delineator.download.gdrive_client._get_drive_service"),
-            patch(
-                "delineator.download.gdrive_client._download_shapefile_components"
-            ) as mock_components,
+            patch("delineator.download.gdrive_client._download_shapefile_components") as mock_components,
         ):
             mock_components.return_value = temp_dest_dir
 
@@ -394,9 +384,7 @@ class TestDownloadCatchments:
         with (
             patch("delineator.download.gdrive_client._get_credentials"),
             patch("delineator.download.gdrive_client._get_drive_service"),
-            patch(
-                "delineator.download.gdrive_client._download_shapefile_components"
-            ) as mock_components,
+            patch("delineator.download.gdrive_client._download_shapefile_components") as mock_components,
         ):
             mock_components.return_value = temp_dest_dir
 
@@ -408,22 +396,19 @@ class TestDownloadCatchments:
 
     def test_skips_if_exists(self, temp_dest_dir: Path) -> None:
         """Should skip download if .shp file already exists."""
-        # Create extract directory and .shp file
-        extract_dir = temp_dest_dir / "cat_pfaf_42"
-        extract_dir.mkdir(parents=True, exist_ok=True)
-        shp_file = extract_dir / "cat_pfaf_42_MERIT_Hydro_v07_Basins_v01.shp"
+        # Create dest directory and .shp file directly in it (no subdirectory)
+        temp_dest_dir.mkdir(parents=True, exist_ok=True)
+        shp_file = temp_dest_dir / "cat_pfaf_42_MERIT_Hydro_v07_Basins_v01.shp"
         shp_file.touch()
 
         with (
             patch("delineator.download.gdrive_client._get_credentials") as mock_creds,
         ):
-            result = download_catchments(
-                basin=42, dest_dir=temp_dest_dir, data_source=DataSource.BUGFIX1
-            )
+            result = download_catchments(basin=42, dest_dir=temp_dest_dir, data_source=DataSource.BUGFIX1)
 
             # Should not try to get credentials
             mock_creds.assert_not_called()
-            assert result == extract_dir
+            assert result == temp_dest_dir
 
     def test_invalid_basin_raises(self, temp_dest_dir: Path) -> None:
         """Should raise ValueError for invalid basin code."""
@@ -452,9 +437,7 @@ class TestDownloadRivers:
             patch("delineator.download.gdrive_client._get_default_data_source", return_value=DataSource.BUGFIX1),
             patch("delineator.download.gdrive_client._get_credentials"),
             patch("delineator.download.gdrive_client._get_drive_service"),
-            patch(
-                "delineator.download.gdrive_client._download_shapefile_components"
-            ) as mock_components,
+            patch("delineator.download.gdrive_client._download_shapefile_components") as mock_components,
         ):
             mock_components.return_value = temp_dest_dir
 
@@ -467,9 +450,7 @@ class TestDownloadRivers:
         with (
             patch("delineator.download.gdrive_client._get_credentials"),
             patch("delineator.download.gdrive_client._get_drive_service"),
-            patch(
-                "delineator.download.gdrive_client._download_shapefile_components"
-            ) as mock_components,
+            patch("delineator.download.gdrive_client._download_shapefile_components") as mock_components,
         ):
             mock_components.return_value = temp_dest_dir
 
@@ -563,9 +544,7 @@ class TestEnvironmentVariableOverride:
             patch("delineator.download.gdrive_client.MERIT_BASINS_FOLDER_ID", custom_folder_id),
             patch("delineator.download.gdrive_client._get_credentials"),
             patch("delineator.download.gdrive_client._get_drive_service"),
-            patch(
-                "delineator.download.gdrive_client._download_shapefile_components"
-            ) as mock_components,
+            patch("delineator.download.gdrive_client._download_shapefile_components") as mock_components,
         ):
             mock_components.return_value = tmp_path
 

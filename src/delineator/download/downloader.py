@@ -19,7 +19,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .basin_selector import get_basins_for_bbox, validate_basin_codes
-from .gdrive_client import download_basin_vectors as gdrive_download_basin_vectors
+from .gdrive_client import download_catchments as gdrive_download_catchments
+from .gdrive_client import download_rivers as gdrive_download_rivers
 from .http_client import download_basin_rasters, download_simplified_catchments
 
 # Set up logging
@@ -149,6 +150,7 @@ def download_vectors_for_basins(
     # Get output paths
     paths = get_output_paths(output_dir)
     catchments_dir = paths["catchments"]
+    rivers_dir = paths["rivers"]
 
     logger.info(f"Downloading vectors for {len(basins)} basin(s)")
 
@@ -156,17 +158,26 @@ def download_vectors_for_basins(
         try:
             logger.info(f"Downloading vectors for basin {basin}")
 
-            # Download both catchments and rivers
-            vector_paths = gdrive_download_basin_vectors(
+            # Download catchments to catchments directory
+            catchments_path = gdrive_download_catchments(
                 basin=basin,
-                dest_dir=catchments_dir,  # Will be organized by type
-                include_catchments=True,
-                include_rivers=True,
+                dest_dir=catchments_dir,
                 overwrite=overwrite,
                 credentials_path=credentials,
             )
 
-            results[basin] = vector_paths
+            # Download rivers to rivers directory
+            rivers_path = gdrive_download_rivers(
+                basin=basin,
+                dest_dir=rivers_dir,
+                overwrite=overwrite,
+                credentials_path=credentials,
+            )
+
+            results[basin] = {
+                "catchments": catchments_path,
+                "rivers": rivers_path,
+            }
             logger.info(f"Successfully downloaded vectors for basin {basin}")
 
         except Exception as e:

@@ -81,8 +81,7 @@ def _get_default_data_source() -> DataSource:
         return DataSource(version)
     except ValueError:
         logger.warning(
-            f"Invalid MERIT_BASINS_VERSION: {version}. Using 'bugfix1'. "
-            f"Valid values: {[ds.value for ds in DataSource]}"
+            f"Invalid MERIT_BASINS_VERSION: {version}. Using 'bugfix1'. Valid values: {[ds.value for ds in DataSource]}"
         )
         return DataSource.BUGFIX1
 
@@ -115,15 +114,17 @@ def download_catchments(
     - v1.0: Downloads ZIP archive and extracts it
     - bugfix1 (default): Downloads individual shapefile components
 
+    Files are downloaded directly into dest_dir (no subdirectory).
+
     Args:
         basin: Pfafstetter Level 2 basin code (e.g., 42)
-        dest_dir: Directory to save extracted files
+        dest_dir: Directory to save shapefile components (files go directly here)
         overwrite: If True, re-download even if files exist
         credentials_path: Path to service account JSON. If None, uses GOOGLE_APPLICATION_CREDENTIALS env var.
         data_source: Data source to use. If None, uses MERIT_BASINS_VERSION env var (default: bugfix1).
 
     Returns:
-        Path to directory containing extracted shapefile components
+        Path to directory containing shapefile components (same as dest_dir)
 
     Raises:
         ValueError: Invalid basin code
@@ -132,9 +133,9 @@ def download_catchments(
 
     Example:
         >>> from pathlib import Path
-        >>> cat_dir = download_catchments(42, Path("data/vectors"))
+        >>> cat_dir = download_catchments(42, Path("data/shp/merit_catchments"))
         >>> list(cat_dir.glob("*.shp"))
-        [PosixPath('data/vectors/cat_pfaf_42/cat_pfaf_42_MERIT_Hydro_v07_Basins_v01.shp')]
+        [PosixPath('data/shp/merit_catchments/cat_pfaf_42_MERIT_Hydro_v07_Basins_v01.shp')]
     """
     _validate_basin(basin)
 
@@ -153,14 +154,14 @@ def download_catchments(
     # Get patterns
     source_base = PATTERNS[data_source]["catchments"].format(basin=basin)
     target_base = OUTPUT_PATTERN["catchments"].format(basin=basin)
-    extract_dir_name = f"cat_pfaf_{basin:02d}"
-    extract_dir = Path(dest_dir) / extract_dir_name
+    dest_dir = Path(dest_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
 
     # Check if already downloaded (check for .shp file)
-    target_shp = extract_dir / f"{target_base}.shp"
+    target_shp = dest_dir / f"{target_base}.shp"
     if target_shp.exists() and not overwrite:
-        logger.info(f"Files already exist: {extract_dir}")
-        return extract_dir
+        logger.info(f"Files already exist: {dest_dir}")
+        return dest_dir
 
     if data_source == DataSource.BUGFIX1:
         # Download individual shapefile components
@@ -172,7 +173,7 @@ def download_catchments(
             service=service,
             folder_id=folder_id,
             source_base=source_base,
-            dest_dir=extract_dir,
+            dest_dir=dest_dir,
             target_base=target_base,
             overwrite=overwrite,
         )
@@ -184,7 +185,7 @@ def download_catchments(
         return _download_and_extract(
             filename=zip_filename,
             dest_dir=dest_dir,
-            extract_dir_name=extract_dir_name,
+            target_base=target_base,
             overwrite=overwrite,
             credentials_path=credentials_path,
         )
@@ -204,15 +205,17 @@ def download_rivers(
     - v1.0: Downloads ZIP archive and extracts it
     - bugfix1 (default): Downloads individual shapefile components
 
+    Files are downloaded directly into dest_dir (no subdirectory).
+
     Args:
         basin: Pfafstetter Level 2 basin code (e.g., 42)
-        dest_dir: Directory to save extracted files
+        dest_dir: Directory to save shapefile components (files go directly here)
         overwrite: If True, re-download even if files exist
         credentials_path: Path to service account JSON. If None, uses GOOGLE_APPLICATION_CREDENTIALS env var.
         data_source: Data source to use. If None, uses MERIT_BASINS_VERSION env var (default: bugfix1).
 
     Returns:
-        Path to directory containing extracted shapefile components
+        Path to directory containing shapefile components (same as dest_dir)
 
     Raises:
         ValueError: Invalid basin code
@@ -221,9 +224,9 @@ def download_rivers(
 
     Example:
         >>> from pathlib import Path
-        >>> riv_dir = download_rivers(42, Path("data/vectors"))
+        >>> riv_dir = download_rivers(42, Path("data/shp/merit_rivers"))
         >>> list(riv_dir.glob("*.shp"))
-        [PosixPath('data/vectors/riv_pfaf_42/riv_pfaf_42_MERIT_Hydro_v07_Basins_v01.shp')]
+        [PosixPath('data/shp/merit_rivers/riv_pfaf_42_MERIT_Hydro_v07_Basins_v01.shp')]
     """
     _validate_basin(basin)
 
@@ -242,14 +245,14 @@ def download_rivers(
     # Get patterns
     source_base = PATTERNS[data_source]["rivers"].format(basin=basin)
     target_base = OUTPUT_PATTERN["rivers"].format(basin=basin)
-    extract_dir_name = f"riv_pfaf_{basin:02d}"
-    extract_dir = Path(dest_dir) / extract_dir_name
+    dest_dir = Path(dest_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
 
     # Check if already downloaded (check for .shp file)
-    target_shp = extract_dir / f"{target_base}.shp"
+    target_shp = dest_dir / f"{target_base}.shp"
     if target_shp.exists() and not overwrite:
-        logger.info(f"Files already exist: {extract_dir}")
-        return extract_dir
+        logger.info(f"Files already exist: {dest_dir}")
+        return dest_dir
 
     if data_source == DataSource.BUGFIX1:
         # Download individual shapefile components
@@ -261,7 +264,7 @@ def download_rivers(
             service=service,
             folder_id=folder_id,
             source_base=source_base,
-            dest_dir=extract_dir,
+            dest_dir=dest_dir,
             target_base=target_base,
             overwrite=overwrite,
         )
@@ -273,7 +276,7 @@ def download_rivers(
         return _download_and_extract(
             filename=zip_filename,
             dest_dir=dest_dir,
-            extract_dir_name=extract_dir_name,
+            target_base=target_base,
             overwrite=overwrite,
             credentials_path=credentials_path,
         )
@@ -716,17 +719,13 @@ def _download_shapefile_components(
         # Download with retries
         for attempt in range(1, MAX_RETRIES + 1):
             try:
-                logger.info(
-                    f"Downloading {source_filename} (attempt {attempt}/{MAX_RETRIES})"
-                )
+                logger.info(f"Downloading {source_filename} (attempt {attempt}/{MAX_RETRIES})")
                 _download_file(service, file_id, target_path)
                 downloaded_files.append(target_path)
                 break
             except Exception as e:
                 if attempt < MAX_RETRIES:
-                    logger.warning(
-                        f"Download attempt {attempt} failed: {e}. Retrying in {RETRY_DELAY}s..."
-                    )
+                    logger.warning(f"Download attempt {attempt} failed: {e}. Retrying in {RETRY_DELAY}s...")
                     time.sleep(RETRY_DELAY)
                 else:
                     logger.error(f"Download failed after {MAX_RETRIES} attempts: {e}")
@@ -743,37 +742,35 @@ def _download_shapefile_components(
             if f.exists():
                 f.unlink()
         raise FileNotFoundError(
-            f"Required shapefile components not found on Google Drive: {missing_required}. "
-            f"Check folder ID: {folder_id}"
+            f"Required shapefile components not found on Google Drive: {missing_required}. Check folder ID: {folder_id}"
         )
 
-    logger.info(
-        f"Successfully downloaded {len(downloaded_files)} shapefile components to {dest_dir}"
-    )
+    logger.info(f"Successfully downloaded {len(downloaded_files)} shapefile components to {dest_dir}")
     return dest_dir
 
 
 def _download_and_extract(
     filename: str,
     dest_dir: Path,
-    extract_dir_name: str,
+    target_base: str,
     overwrite: bool,
     credentials_path: Path | None,
 ) -> Path:
     """
-    Download a ZIP file from Google Drive and extract it.
+    Download a ZIP file from Google Drive and extract it directly to dest_dir.
 
     This is a helper function that encapsulates the common download-and-extract workflow.
+    Files are extracted directly to dest_dir (no subdirectory).
 
     Args:
         filename: Name of file to download (e.g., "cat_pfaf_42_MERIT_Hydro_v07_Basins_v01.zip")
-        dest_dir: Directory to save extracted files
-        extract_dir_name: Name of subdirectory to extract to
+        dest_dir: Directory to save extracted files (files go directly here)
+        target_base: Base name for checking existing files (e.g., "cat_pfaf_42_MERIT_Hydro_v07_Basins_v01")
         overwrite: If True, re-download even if files exist
         credentials_path: Path to service account JSON
 
     Returns:
-        Path to directory containing extracted files
+        Path to directory containing extracted files (same as dest_dir)
 
     Raises:
         FileNotFoundError: File not found on Google Drive or credentials missing
@@ -783,20 +780,20 @@ def _download_and_extract(
     dest_dir = Path(dest_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
 
-    # Paths for ZIP file and extracted directory
+    # Path for ZIP file (download to dest_dir)
     zip_path = dest_dir / filename
-    extract_dir = dest_dir / extract_dir_name
 
-    # Check if already extracted
-    if extract_dir.exists() and not overwrite:
-        logger.info(f"Files already extracted: {extract_dir}")
-        return extract_dir
+    # Check if already extracted by looking for .shp file
+    target_shp = dest_dir / f"{target_base}.shp"
+    if target_shp.exists() and not overwrite:
+        logger.info(f"Files already extracted: {dest_dir}")
+        return dest_dir
 
     # Check if ZIP already downloaded
     if zip_path.exists() and not overwrite:
         logger.info(f"ZIP file already exists: {zip_path}, extracting...")
-        _extract_zip(zip_path, extract_dir)
-        return extract_dir
+        _extract_zip(zip_path, dest_dir)
+        return dest_dir
 
     # Get credentials and service
     credentials = _get_credentials(credentials_path)
@@ -828,22 +825,17 @@ def _download_and_extract(
                     zip_path.unlink()
                 raise
 
-    # Extract ZIP file
+    # Extract ZIP file directly to dest_dir
     try:
-        _extract_zip(zip_path, extract_dir)
+        _extract_zip(zip_path, dest_dir)
 
         # Optionally remove ZIP file after successful extraction to save space
         # Uncomment if you want to delete ZIPs after extraction:
         # zip_path.unlink()
         # logger.debug(f"Removed ZIP file: {zip_path}")
 
-        return extract_dir
+        return dest_dir
 
     except Exception as e:
         logger.error(f"Error extracting ZIP file: {e}")
-        # Clean up failed extraction
-        if extract_dir.exists():
-            import shutil
-
-            shutil.rmtree(extract_dir)
         raise
