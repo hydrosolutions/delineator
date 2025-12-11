@@ -79,6 +79,9 @@ def get_basins_for_bbox(
     performs a spatial intersection with the Level 2 basins shapefile to
     determine which basins need to be downloaded.
 
+    Supports point queries (when min_lon == max_lon and/or min_lat == max_lat)
+    by applying a small buffer around the point.
+
     Args:
         min_lon: Western boundary (longitude in decimal degrees)
         min_lat: Southern boundary (latitude in decimal degrees)
@@ -100,11 +103,28 @@ def get_basins_for_bbox(
         >>> print(basins)
         [41]
     """
-    # Validate bounding box
-    if min_lon >= max_lon:
-        raise ValueError(f"Invalid bbox: min_lon ({min_lon}) must be less than max_lon ({max_lon})")
-    if min_lat >= max_lat:
-        raise ValueError(f"Invalid bbox: min_lat ({min_lat}) must be less than max_lat ({max_lat})")
+    # Handle point/line queries by adding buffer (~111 meters at equator)
+    POINT_BUFFER = 0.001
+
+    if min_lon == max_lon:
+        min_lon -= POINT_BUFFER
+        max_lon += POINT_BUFFER
+
+    if min_lat == max_lat:
+        min_lat -= POINT_BUFFER
+        max_lat += POINT_BUFFER
+
+    # Clamp to valid coordinate ranges
+    min_lon = max(-180.0, min_lon)
+    max_lon = min(180.0, max_lon)
+    min_lat = max(-90.0, min_lat)
+    max_lat = min(90.0, max_lat)
+
+    # Validate bounding box - only reject inverted coordinates
+    if min_lon > max_lon:
+        raise ValueError(f"Invalid bbox: min_lon ({min_lon}) must be <= max_lon ({max_lon})")
+    if min_lat > max_lat:
+        raise ValueError(f"Invalid bbox: min_lat ({min_lat}) must be <= max_lat ({max_lat})")
 
     # Use default shapefile if none provided
     basins_shapefile = DEFAULT_BASINS_SHAPEFILE if basins_shapefile is None else str(basins_shapefile)
