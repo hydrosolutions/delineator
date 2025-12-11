@@ -6,9 +6,14 @@ Google Drive (hosted by ReachHydro/Princeton). The data includes catchment polyg
 and river flowlines organized by Pfafstetter Level 2 basin codes.
 
 Data is hosted at: https://www.reachhydro.org/home/params/merit-basins
-Files are organized in pfaf_level_02/ folders with naming pattern:
-- Catchments: cat_pfaf_{basin}_MERIT_Hydro_v07_Basins_v01.zip
-- Rivers: riv_pfaf_{basin}_MERIT_Hydro_v07_Basins_v01.zip
+
+Supports two data formats:
+- v1.0: Original ZIP archives (cat_pfaf_{basin}_MERIT_Hydro_v07_Basins_v01.zip)
+- bugfix1: Individual shapefile components with _bugfix1 suffix (default)
+
+Configure via environment variables:
+- MERIT_BASINS_VERSION: "v1.0" or "bugfix1" (default: "bugfix1")
+- MERIT_BASINS_FOLDER_ID: Override default folder ID for the selected version
 """
 
 import io
@@ -17,6 +22,7 @@ import os
 import time
 import zipfile
 from collections.abc import Callable
+from enum import Enum
 from functools import lru_cache
 from pathlib import Path
 
@@ -30,12 +36,62 @@ from tqdm import tqdm
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Google Drive folder ID - can be overridden via environment variable
-# This is the ID for the pfaf_level_02 folder containing MERIT-Basins data
-# Set via: export MERIT_BASINS_FOLDER_ID="your_folder_id_here"
+
+class DataSource(Enum):
+    """Available MERIT-Basins data sources on Google Drive."""
+
+    V1_ZIP = "v1.0"  # Original ZIP files
+    BUGFIX1 = "bugfix1"  # Bugfix1 individual shapefile components (default)
+
+
+# Shapefile component extensions
+SHAPEFILE_EXTENSIONS_REQUIRED = [".shp", ".dbf", ".shx"]
+SHAPEFILE_EXTENSIONS_OPTIONAL = [".prj", ".cpg"]
+SHAPEFILE_EXTENSIONS = SHAPEFILE_EXTENSIONS_REQUIRED + SHAPEFILE_EXTENSIONS_OPTIONAL
+
+# Default folder IDs for each data source
+FOLDER_IDS: dict[DataSource, str] = {
+    DataSource.V1_ZIP: "1uCQFmdxFbjwoT9OYJxw-pXaP8q_GYH1a",
+    DataSource.BUGFIX1: "1owkvZQBMZbvRv3V4Ff3xQPEgmAC48vJo",
+}
+
+# File naming patterns for each data source
+PATTERNS: dict[DataSource, dict[str, str]] = {
+    DataSource.V1_ZIP: {
+        "catchments": "cat_pfaf_{basin:02d}_MERIT_Hydro_v07_Basins_v01",
+        "rivers": "riv_pfaf_{basin:02d}_MERIT_Hydro_v07_Basins_v01",
+    },
+    DataSource.BUGFIX1: {
+        "catchments": "cat_pfaf_{basin:02d}_MERIT_Hydro_v07_Basins_v01_bugfix1",
+        "rivers": "riv_pfaf_{basin:02d}_MERIT_Hydro_v07_Basins_v01_bugfix1",
+    },
+}
+
+# Canonical output pattern (what downstream code expects - no _bugfix1 suffix)
+OUTPUT_PATTERN: dict[str, str] = {
+    "catchments": "cat_pfaf_{basin:02d}_MERIT_Hydro_v07_Basins_v01",
+    "rivers": "riv_pfaf_{basin:02d}_MERIT_Hydro_v07_Basins_v01",
+}
+
+
+def _get_default_data_source() -> DataSource:
+    """Get the default data source from environment variable."""
+    version = os.getenv("MERIT_BASINS_VERSION", "bugfix1")
+    try:
+        return DataSource(version)
+    except ValueError:
+        logger.warning(
+            f"Invalid MERIT_BASINS_VERSION: {version}. Using 'bugfix1'. "
+            f"Valid values: {[ds.value for ds in DataSource]}"
+        )
+        return DataSource.BUGFIX1
+
+
+# Legacy: Google Drive folder ID - can be overridden via environment variable
+# This is now computed based on data source, but env var still takes precedence
 MERIT_BASINS_FOLDER_ID = os.getenv("MERIT_BASINS_FOLDER_ID", "")
 
-# File naming patterns
+# Legacy file naming patterns (kept for backward compatibility)
 CATCHMENTS_PATTERN = "cat_pfaf_{basin:02d}_MERIT_Hydro_v07_Basins_v01"
 RIVERS_PATTERN = "riv_pfaf_{basin:02d}_MERIT_Hydro_v07_Basins_v01"
 
@@ -50,27 +106,29 @@ def download_catchments(
     dest_dir: Path,
     overwrite: bool = False,
     credentials_path: Path | None = None,
+    data_source: DataSource | None = None,
 ) -> Path:
     """
     Download MERIT-Basins catchment shapefile for a specific basin.
 
-    The downloaded ZIP file will be automatically extracted to a subdirectory
-    named after the basin (e.g., "cat_pfaf_42" for basin 42).
+    Supports two data formats:
+    - v1.0: Downloads ZIP archive and extracts it
+    - bugfix1 (default): Downloads individual shapefile components
 
     Args:
         basin: Pfafstetter Level 2 basin code (e.g., 42)
         dest_dir: Directory to save extracted files
         overwrite: If True, re-download even if files exist
         credentials_path: Path to service account JSON. If None, uses GOOGLE_APPLICATION_CREDENTIALS env var.
+        data_source: Data source to use. If None, uses MERIT_BASINS_VERSION env var (default: bugfix1).
 
     Returns:
         Path to directory containing extracted shapefile components
 
     Raises:
         ValueError: Invalid basin code
-        FileNotFoundError: Credentials file not found
+        FileNotFoundError: Credentials file not found or data not found on Google Drive
         GoogleAuthError: Authentication failed
-        RuntimeError: Google Drive folder ID not configured
 
     Example:
         >>> from pathlib import Path
@@ -79,19 +137,57 @@ def download_catchments(
         [PosixPath('data/vectors/cat_pfaf_42/cat_pfaf_42_MERIT_Hydro_v07_Basins_v01.shp')]
     """
     _validate_basin(basin)
-    _validate_folder_id()
 
-    filename = CATCHMENTS_PATTERN.format(basin=basin)
-    zip_filename = f"{filename}.zip"
+    # Determine data source
+    if data_source is None:
+        data_source = _get_default_data_source()
+
+    # Get folder ID (env var overrides default)
+    folder_id = MERIT_BASINS_FOLDER_ID or FOLDER_IDS.get(data_source, "")
+    if not folder_id:
+        raise RuntimeError(
+            f"No folder ID configured for data source '{data_source.value}'. "
+            "Set MERIT_BASINS_FOLDER_ID environment variable."
+        )
+
+    # Get patterns
+    source_base = PATTERNS[data_source]["catchments"].format(basin=basin)
+    target_base = OUTPUT_PATTERN["catchments"].format(basin=basin)
     extract_dir_name = f"cat_pfaf_{basin:02d}"
+    extract_dir = Path(dest_dir) / extract_dir_name
 
-    return _download_and_extract(
-        filename=zip_filename,
-        dest_dir=dest_dir,
-        extract_dir_name=extract_dir_name,
-        overwrite=overwrite,
-        credentials_path=credentials_path,
-    )
+    # Check if already downloaded (check for .shp file)
+    target_shp = extract_dir / f"{target_base}.shp"
+    if target_shp.exists() and not overwrite:
+        logger.info(f"Files already exist: {extract_dir}")
+        return extract_dir
+
+    if data_source == DataSource.BUGFIX1:
+        # Download individual shapefile components
+        credentials = _get_credentials(credentials_path)
+        service = _get_drive_service(credentials)
+
+        logger.info(f"Downloading catchments for basin {basin} (bugfix1 format)")
+        return _download_shapefile_components(
+            service=service,
+            folder_id=folder_id,
+            source_base=source_base,
+            dest_dir=extract_dir,
+            target_base=target_base,
+            overwrite=overwrite,
+        )
+    else:
+        # Original ZIP download (v1.0)
+        zip_filename = f"{source_base}.zip"
+
+        logger.info(f"Downloading catchments for basin {basin} (ZIP format)")
+        return _download_and_extract(
+            filename=zip_filename,
+            dest_dir=dest_dir,
+            extract_dir_name=extract_dir_name,
+            overwrite=overwrite,
+            credentials_path=credentials_path,
+        )
 
 
 def download_rivers(
@@ -99,27 +195,29 @@ def download_rivers(
     dest_dir: Path,
     overwrite: bool = False,
     credentials_path: Path | None = None,
+    data_source: DataSource | None = None,
 ) -> Path:
     """
     Download MERIT-Basins river flowlines shapefile for a specific basin.
 
-    The downloaded ZIP file will be automatically extracted to a subdirectory
-    named after the basin (e.g., "riv_pfaf_42" for basin 42).
+    Supports two data formats:
+    - v1.0: Downloads ZIP archive and extracts it
+    - bugfix1 (default): Downloads individual shapefile components
 
     Args:
         basin: Pfafstetter Level 2 basin code (e.g., 42)
         dest_dir: Directory to save extracted files
         overwrite: If True, re-download even if files exist
         credentials_path: Path to service account JSON. If None, uses GOOGLE_APPLICATION_CREDENTIALS env var.
+        data_source: Data source to use. If None, uses MERIT_BASINS_VERSION env var (default: bugfix1).
 
     Returns:
         Path to directory containing extracted shapefile components
 
     Raises:
         ValueError: Invalid basin code
-        FileNotFoundError: Credentials file not found
+        FileNotFoundError: Credentials file not found or data not found on Google Drive
         GoogleAuthError: Authentication failed
-        RuntimeError: Google Drive folder ID not configured
 
     Example:
         >>> from pathlib import Path
@@ -128,19 +226,57 @@ def download_rivers(
         [PosixPath('data/vectors/riv_pfaf_42/riv_pfaf_42_MERIT_Hydro_v07_Basins_v01.shp')]
     """
     _validate_basin(basin)
-    _validate_folder_id()
 
-    filename = RIVERS_PATTERN.format(basin=basin)
-    zip_filename = f"{filename}.zip"
+    # Determine data source
+    if data_source is None:
+        data_source = _get_default_data_source()
+
+    # Get folder ID (env var overrides default)
+    folder_id = MERIT_BASINS_FOLDER_ID or FOLDER_IDS.get(data_source, "")
+    if not folder_id:
+        raise RuntimeError(
+            f"No folder ID configured for data source '{data_source.value}'. "
+            "Set MERIT_BASINS_FOLDER_ID environment variable."
+        )
+
+    # Get patterns
+    source_base = PATTERNS[data_source]["rivers"].format(basin=basin)
+    target_base = OUTPUT_PATTERN["rivers"].format(basin=basin)
     extract_dir_name = f"riv_pfaf_{basin:02d}"
+    extract_dir = Path(dest_dir) / extract_dir_name
 
-    return _download_and_extract(
-        filename=zip_filename,
-        dest_dir=dest_dir,
-        extract_dir_name=extract_dir_name,
-        overwrite=overwrite,
-        credentials_path=credentials_path,
-    )
+    # Check if already downloaded (check for .shp file)
+    target_shp = extract_dir / f"{target_base}.shp"
+    if target_shp.exists() and not overwrite:
+        logger.info(f"Files already exist: {extract_dir}")
+        return extract_dir
+
+    if data_source == DataSource.BUGFIX1:
+        # Download individual shapefile components
+        credentials = _get_credentials(credentials_path)
+        service = _get_drive_service(credentials)
+
+        logger.info(f"Downloading rivers for basin {basin} (bugfix1 format)")
+        return _download_shapefile_components(
+            service=service,
+            folder_id=folder_id,
+            source_base=source_base,
+            dest_dir=extract_dir,
+            target_base=target_base,
+            overwrite=overwrite,
+        )
+    else:
+        # Original ZIP download (v1.0)
+        zip_filename = f"{source_base}.zip"
+
+        logger.info(f"Downloading rivers for basin {basin} (ZIP format)")
+        return _download_and_extract(
+            filename=zip_filename,
+            dest_dir=dest_dir,
+            extract_dir_name=extract_dir_name,
+            overwrite=overwrite,
+            credentials_path=credentials_path,
+        )
 
 
 def download_basin_vectors(
@@ -150,9 +286,14 @@ def download_basin_vectors(
     include_rivers: bool = True,
     overwrite: bool = False,
     credentials_path: Path | None = None,
+    data_source: DataSource | None = None,
 ) -> dict[str, Path]:
     """
     Download both catchments and rivers for a basin.
+
+    Supports two data formats:
+    - v1.0: Downloads ZIP archives and extracts them
+    - bugfix1 (default): Downloads individual shapefile components
 
     Args:
         basin: Pfafstetter Level 2 basin code (e.g., 42)
@@ -161,15 +302,15 @@ def download_basin_vectors(
         include_rivers: If True, download river flowlines
         overwrite: If True, re-download even if files exist
         credentials_path: Path to service account JSON. If None, uses GOOGLE_APPLICATION_CREDENTIALS env var.
+        data_source: Data source to use. If None, uses MERIT_BASINS_VERSION env var (default: bugfix1).
 
     Returns:
         Dictionary mapping vector type ("catchments", "rivers") to extracted directory path
 
     Raises:
         ValueError: Invalid basin or no vector types selected
-        FileNotFoundError: Credentials file not found
+        FileNotFoundError: Credentials file not found or data not found on Google Drive
         GoogleAuthError: Authentication failed
-        RuntimeError: Google Drive folder ID not configured
 
     Example:
         >>> from pathlib import Path
@@ -181,26 +322,25 @@ def download_basin_vectors(
         raise ValueError("At least one of include_catchments or include_rivers must be True")
 
     _validate_basin(basin)
-    _validate_folder_id()
 
     results: dict[str, Path] = {}
 
     if include_catchments:
-        logger.info(f"Downloading catchments for basin {basin}")
         results["catchments"] = download_catchments(
             basin=basin,
             dest_dir=dest_dir,
             overwrite=overwrite,
             credentials_path=credentials_path,
+            data_source=data_source,
         )
 
     if include_rivers:
-        logger.info(f"Downloading rivers for basin {basin}")
         results["rivers"] = download_rivers(
             basin=basin,
             dest_dir=dest_dir,
             overwrite=overwrite,
             credentials_path=credentials_path,
+            data_source=data_source,
         )
 
     return results
@@ -517,6 +657,100 @@ def _extract_zip(zip_path: Path, extract_dir: Path) -> None:
         zip_ref.extractall(extract_dir)
 
     logger.info(f"Extracted {len(list(extract_dir.iterdir()))} files to {extract_dir}")
+
+
+def _download_shapefile_components(
+    service,
+    folder_id: str,
+    source_base: str,
+    dest_dir: Path,
+    target_base: str,
+    overwrite: bool,
+) -> Path:
+    """
+    Download individual shapefile components from Google Drive.
+
+    Downloads .shp, .dbf, .shx (required) and .prj, .cpg (optional) files.
+    Renames files to strip the _bugfix1 suffix for downstream compatibility.
+
+    Args:
+        service: Google Drive API service
+        folder_id: Google Drive folder ID containing the files
+        source_base: Base filename on Google Drive (e.g., "cat_pfaf_42_..._bugfix1")
+        dest_dir: Directory to save files
+        target_base: Target base filename (e.g., "cat_pfaf_42_..." without _bugfix1)
+        overwrite: If True, re-download even if files exist
+
+    Returns:
+        Path to directory containing downloaded shapefile components
+
+    Raises:
+        FileNotFoundError: Required shapefile components not found on Google Drive
+    """
+    dest_dir = Path(dest_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    downloaded_files: list[Path] = []
+    missing_required: list[str] = []
+
+    for ext in SHAPEFILE_EXTENSIONS:
+        source_filename = f"{source_base}{ext}"
+        target_path = dest_dir / f"{target_base}{ext}"
+
+        # Skip if exists and not overwriting
+        if target_path.exists() and not overwrite:
+            logger.debug(f"File already exists: {target_path}")
+            downloaded_files.append(target_path)
+            continue
+
+        # Find file on Google Drive
+        file_id = _find_file_id(service, folder_id, source_filename)
+
+        if file_id is None:
+            if ext in SHAPEFILE_EXTENSIONS_REQUIRED:
+                missing_required.append(source_filename)
+            else:
+                logger.debug(f"Optional shapefile component not found: {source_filename}")
+            continue
+
+        # Download with retries
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                logger.info(
+                    f"Downloading {source_filename} (attempt {attempt}/{MAX_RETRIES})"
+                )
+                _download_file(service, file_id, target_path)
+                downloaded_files.append(target_path)
+                break
+            except Exception as e:
+                if attempt < MAX_RETRIES:
+                    logger.warning(
+                        f"Download attempt {attempt} failed: {e}. Retrying in {RETRY_DELAY}s..."
+                    )
+                    time.sleep(RETRY_DELAY)
+                else:
+                    logger.error(f"Download failed after {MAX_RETRIES} attempts: {e}")
+                    # Clean up partially downloaded files on failure
+                    for f in downloaded_files:
+                        if f.exists():
+                            f.unlink()
+                    raise
+
+    # Check for missing required files
+    if missing_required:
+        # Clean up any files that were downloaded
+        for f in downloaded_files:
+            if f.exists():
+                f.unlink()
+        raise FileNotFoundError(
+            f"Required shapefile components not found on Google Drive: {missing_required}. "
+            f"Check folder ID: {folder_id}"
+        )
+
+    logger.info(
+        f"Successfully downloaded {len(downloaded_files)} shapefile components to {dest_dir}"
+    )
+    return dest_dir
 
 
 def _download_and_extract(

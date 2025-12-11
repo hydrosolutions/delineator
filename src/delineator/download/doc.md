@@ -95,18 +95,24 @@ Download both raster types for a basin. Returns dict mapping raster type to file
 
 ### Google Drive Downloads (MERIT-Basins)
 
-Requires Google Drive credentials (service account) and `MERIT_BASINS_FOLDER_ID` environment variable.
+Requires Google Drive credentials (service account). Supports two data versions:
+
+- **bugfix1** (default): Individual shapefile components with important bug fixes
+- **v1.0**: Original ZIP archives
 
 ```python
+from delineator.download import DataSource
+
 def download_catchments(
     basin: int,
     dest_dir: Path,
     overwrite: bool = False,
     credentials_path: Path | None = None,
+    data_source: DataSource | None = None,  # Default: bugfix1
 ) -> Path
 ```
 
-Download and extract catchment shapefiles for a basin. Returns path to extracted directory.
+Download catchment shapefiles for a basin. Returns path to extracted directory. The `data_source` parameter selects which version to download.
 
 ```python
 def download_rivers(
@@ -114,10 +120,11 @@ def download_rivers(
     dest_dir: Path,
     overwrite: bool = False,
     credentials_path: Path | None = None,
+    data_source: DataSource | None = None,  # Default: bugfix1
 ) -> Path
 ```
 
-Download and extract river flowlines shapefiles for a basin. Returns path to extracted directory.
+Download river flowlines shapefiles for a basin. Returns path to extracted directory.
 
 ```python
 def download_basin_vectors(
@@ -127,6 +134,7 @@ def download_basin_vectors(
     include_rivers: bool = True,
     overwrite: bool = False,
     credentials_path: Path | None = None,
+    data_source: DataSource | None = None,  # Default: bugfix1
 ) -> dict[str, Path]
 ```
 
@@ -187,8 +195,42 @@ Dataclass containing all download results and errors.
 | Flow Direction Rasters | mghydro.com | `https://mghydro.com/watersheds/rasters/flow_dir_basins/flowdir{basin}.tif` |
 | Flow Accumulation Rasters | mghydro.com | `https://mghydro.com/watersheds/rasters/accum_basins/accum{basin}.tif` |
 | Simplified Catchments | mghydro.com | `https://mghydro.com/watersheds/share/catchments_simplified.zip` |
-| Catchment Shapefiles | Google Drive (ReachHydro) | `cat_pfaf_{basin:02d}_MERIT_Hydro_v07_Basins_v01.zip` |
-| River Shapefiles | Google Drive (ReachHydro) | `riv_pfaf_{basin:02d}_MERIT_Hydro_v07_Basins_v01.zip` |
+| Catchment Shapefiles (v1.0) | Google Drive (ReachHydro) | `cat_pfaf_{basin:02d}_MERIT_Hydro_v07_Basins_v01.zip` |
+| Catchment Shapefiles (bugfix1) | Google Drive (ReachHydro) | `cat_pfaf_{basin:02d}_MERIT_Hydro_v07_Basins_v01_bugfix1.{shp,dbf,shx,prj,cpg}` |
+| River Shapefiles (v1.0) | Google Drive (ReachHydro) | `riv_pfaf_{basin:02d}_MERIT_Hydro_v07_Basins_v01.zip` |
+| River Shapefiles (bugfix1) | Google Drive (ReachHydro) | `riv_pfaf_{basin:02d}_MERIT_Hydro_v07_Basins_v01_bugfix1.{shp,dbf,shx,prj,cpg}` |
+
+### MERIT-Basins Data Versions
+
+The module supports two versions of MERIT-Basins vector data:
+
+| Version | Format | Description | Default |
+|---------|--------|-------------|---------|
+| **bugfix1** | Individual files (.shp, .dbf, .shx, .prj, .cpg) | Contains important bug fixes. Recommended. | Yes |
+| **v1.0** | ZIP archives | Original release. | No |
+
+**Note:** When downloading bugfix1 data, the files are automatically renamed to strip the `_bugfix1` suffix for compatibility with downstream code. The output files will match the v1.0 naming convention (e.g., `cat_pfaf_42_MERIT_Hydro_v07_Basins_v01.shp`).
+
+### Selecting Data Version
+
+```python
+from delineator.download import download_catchments, DataSource
+
+# Use bugfix1 (default)
+download_catchments(basin=42, dest_dir=Path("data/vectors"))
+
+# Explicitly specify bugfix1
+download_catchments(basin=42, dest_dir=Path("data/vectors"), data_source=DataSource.BUGFIX1)
+
+# Use original v1.0 ZIP format
+download_catchments(basin=42, dest_dir=Path("data/vectors"), data_source=DataSource.V1_ZIP)
+```
+
+Or set via environment variable:
+
+```bash
+export MERIT_BASINS_VERSION="bugfix1"  # or "v1.0"
+```
 
 ### Data Organization
 
@@ -200,10 +242,14 @@ MERIT-Basins vectors are hosted by ReachHydro/Princeton at: <https://www.reachhy
 
 ### Required for Google Drive Downloads
 
-- `MERIT_BASINS_FOLDER_ID` - Google Drive folder ID containing MERIT-Basins data (pfaf_level_02 folder)
 - `GOOGLE_APPLICATION_CREDENTIALS` - Path to service account JSON file
 
 ### Optional
+
+- `MERIT_BASINS_VERSION` - Data version to download: `"bugfix1"` (default) or `"v1.0"`
+- `MERIT_BASINS_FOLDER_ID` - Override the default Google Drive folder ID for the selected version. If not set, uses built-in folder IDs:
+  - bugfix1: `1owkvZQBMZbvRv3V4Ff3xQPEgmAC48vJo`
+  - v1.0: `1uCQFmdxFbjwoT9OYJxw-pXaP8q_GYH1a`
 
 The module uses these if set, otherwise requires explicit paths:
 

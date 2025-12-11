@@ -11,6 +11,7 @@ for watershed delineation from various sources:
 from .basin_selector import get_all_basin_codes, get_basins_for_bbox, validate_basin_codes
 from .downloader import DownloadResult, download_data
 from .gdrive_client import (
+    DataSource,
     download_basin_vectors,
     download_catchments,
     download_rivers,
@@ -31,6 +32,7 @@ __all__ = [
     "download_basin_rasters",
     "download_data",
     "DownloadResult",
+    "DataSource",
     "download_catchments",
     "download_rivers",
     "download_basin_vectors",
