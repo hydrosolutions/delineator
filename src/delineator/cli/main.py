@@ -530,11 +530,12 @@ def download_command(
             # Validate basin codes
             from delineator.download import validate_basin_codes
 
-            invalid = validate_basin_codes(basin_codes)
-            if invalid:
-                console.print(f"[red]Error:[/red] Invalid basin codes: {', '.join(map(str, invalid))}")
+            try:
+                validate_basin_codes(basin_codes)
+            except ValueError as e:
+                console.print(f"[red]Error:[/red] {e}")
                 console.print("\n[yellow]Hint:[/yellow] Use 'delineator list-basins' to see all valid codes")
-                raise typer.Exit(2)
+                raise typer.Exit(2) from None
 
         if not basin_codes:
             console.print("[yellow]Warning:[/yellow] No basins found for the specified region")
