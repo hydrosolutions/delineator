@@ -18,3 +18,6 @@ pkl/
 
 # Generated documentation (not tracked)
 docs/
+
+# HTML coverage reports
+htmlcov/

@@ -158,6 +158,77 @@ For manual download or offline use:
 - Rasters: [https://mghydro.com/watersheds/rasters](https://mghydro.com/watersheds/rasters)
 - Vectors: [https://www.reachhydro.org/home/params/merit-basins](https://www.reachhydro.org/home/params/merit-basins)
 
+## Google Drive Setup (for Vector Downloads)
+
+**Raster data** (flow direction, accumulation) downloads automatically from mghydro.com — no credentials needed.
+
+**Vector data** (MERIT-Basins catchments and rivers) is hosted on Google Drive and requires authentication. If you only need rasters, use `--rasters-only` to skip this setup.
+
+### 1. Set the MERIT-Basins Folder ID
+
+The vector data is hosted in a Google Drive folder. Set this environment variable:
+
+```bash
+export MERIT_BASINS_FOLDER_ID="1owkvZQBMZbvRv3V4Ff3xQPEgmAC48vJo"
+```
+
+This is the `pfaf_level_02` folder from the [MERIT-Basins bugfix1 release](https://www.reachhydro.org/home/params/merit-basins).
+
+### 2. Create Google Cloud Service Account Credentials
+
+You need a service account to authenticate with Google Drive API.
+
+**Option A: Using gcloud CLI (recommended)**
+
+```bash
+# If you have an existing project and service account:
+gcloud iam service-accounts keys create ~/drive-credentials.json \
+    --iam-account=YOUR_SERVICE_ACCOUNT@YOUR_PROJECT.iam.gserviceaccount.com
+
+# Or create everything from scratch:
+gcloud projects create my-delineator-project --set-as-default
+gcloud services enable drive.googleapis.com
+gcloud iam service-accounts create delineator-sa \
+    --display-name="Delineator Service Account"
+gcloud iam service-accounts keys create ~/drive-credentials.json \
+    --iam-account=delineator-sa@my-delineator-project.iam.gserviceaccount.com
+```
+
+**Option B: Using Google Cloud Console**
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create or select a project
+3. Enable the **Google Drive API**
+4. Go to **IAM & Admin** → **Service Accounts**
+5. Create a service account and download the JSON key
+
+### 3. Set the Credentials Environment Variable
+
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS="$HOME/drive-credentials.json"
+```
+
+### 4. Add to Shell Profile (Recommended)
+
+Add these lines to your `~/.zshrc` or `~/.bashrc` for persistence:
+
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS="$HOME/drive-credentials.json"
+export MERIT_BASINS_FOLDER_ID="1owkvZQBMZbvRv3V4Ff3xQPEgmAC48vJo"
+```
+
+Then reload: `source ~/.zshrc`
+
+### Verification
+
+Test that everything works:
+
+```bash
+delineator download --basins 12 --dry-run
+```
+
+This should show the files that would be downloaded without errors.
+
 ## Development
 
 ### Package Structure
