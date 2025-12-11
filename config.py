@@ -10,7 +10,7 @@ outside of the sample data provided for Iceland.
 """
 
 # Path to your CSV file with the watershed outlet data
-OUTLETS_CSV = 'data/gauge_data/kazakhstan/kazakhstan_gauge_outlets.csv'
+OUTLETS_CSV = 'data/gauge_data/madagascar/madagascar_outlets.csv'
 
 # Set to True for "higher resolution" mode or False for "lower resolution."
 HIGH_RES = True
@@ -44,7 +44,7 @@ LOWRES_CATCHMENTS_DIR = "data/shp/catchments_simplified"
 RIVERS_DIR = "data/shp/merit_rivers"
 
 # Folder where the script will write the output GeoJSON files or shapefiles
-OUTPUT_DIR = "output/kazakhstan"
+OUTPUT_DIR = "/Users/nicolaslazaro/Desktop/carvanify_madagascar"
 
 # The file extension will determine the types of geodata files the script creates.
 #   "gpkg" for GeoPackage (recommended)
@@ -125,3 +125,31 @@ MAX_DIST = 0.075
 # outlet is not getting snapped to a river centerline properly
 THRESHOLD_SINGLE = 500
 THRESHOLD_MULTIPLE = 5000
+
+# =============================================================================
+# DATA DOWNLOAD SETTINGS
+# =============================================================================
+# These settings control the programmatic download of MERIT-Hydro and
+# MERIT-Basins data. Use the download_data.py script to download data.
+
+# Download timeout in seconds (1 hour default for large files)
+DOWNLOAD_TIMEOUT = 3600
+
+# Chunk size for streaming downloads (8KB)
+DOWNLOAD_CHUNK_SIZE = 8192
+
+# Number of retry attempts for failed downloads
+DOWNLOAD_RETRIES = 3
+
+# URL patterns for MERIT-Hydro rasters from mghydro.com
+MGHYDRO_RASTER_BASE = "https://mghydro.com/watersheds/rasters"
+MGHYDRO_SIMPLIFIED_URL = "https://mghydro.com/watersheds/share/catchments_simplified.zip"
+
+# Google Drive folder ID for MERIT-Basins data (pfaf_level_02)
+# Set this to the folder ID from the ReachHydro Google Drive share
+# Or set via environment variable: MERIT_BASINS_FOLDER_ID
+GOOGLE_DRIVE_FOLDER_ID = ""
+
+# Path to Google Drive service account credentials JSON file
+# Or set via environment variable: GOOGLE_APPLICATION_CREDENTIALS
+GOOGLE_DRIVE_CREDENTIALS = ""
