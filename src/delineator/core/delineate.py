@@ -63,6 +63,41 @@ class BasinData:
     rivers_gdf: gpd.GeoDataFrame
 
 
+def collect_upstream_comids(
+    terminal_comid: int,
+    rivers_gdf: gpd.GeoDataFrame,
+) -> list[int]:
+    """
+    Trace upstream network from terminal catchment to collect all contributing COMIDs.
+
+    Uses an iterative approach to traverse the river network upstream using the
+    up1, up2, up3, up4 fields in rivers_gdf, which contain the COMIDs of
+    upstream tributaries.
+
+    Args:
+        terminal_comid: COMID of the terminal (most downstream) catchment
+        rivers_gdf: GeoDataFrame of river reaches with network topology (indexed by COMID).
+                   Must have columns 'up1', 'up2', 'up3', 'up4' containing upstream COMIDs.
+
+    Returns:
+        List of all upstream COMIDs including the terminal_comid
+    """
+    upstream_comids: list[int] = []
+    stack = [terminal_comid]
+
+    while stack:
+        node = stack.pop()
+        upstream_comids.append(node)
+
+        # Check all four upstream connection fields
+        for col in ["up1", "up2", "up3", "up4"]:
+            up_id = rivers_gdf[col].loc[node]
+            if up_id != 0:
+                stack.append(up_id)
+
+    return upstream_comids
+
+
 def get_area(poly: Polygon | MultiPolygon) -> float:
     """
     Calculate area of polygon in km² using equal-area projection.
@@ -203,49 +238,14 @@ def delineate_outlet(
     # Spatial join to find which catchment contains the point
     joined = gpd.sjoin(point_gdf, catchments_gdf, how="left", predicate="intersects")
 
-    if joined.empty or pd.isna(joined.iloc[0]["index_right"]):
+    if joined.empty or pd.isna(joined.iloc[0]["COMID"]):
         raise DelineationError(f"Outlet point ({lat}, {lng}) does not fall within any unit catchment")
 
-    terminal_comid = joined.iloc[0]["index_right"]
+    terminal_comid = joined.iloc[0]["COMID"]
     logger.info(f"  Terminal unit catchment COMID: {terminal_comid}")
 
     # Step 2: Trace upstream to find all contributing unit catchments
-    # Use the recursive addnode function to collect all upstream catchments
-    upstream_comids: list[int] = []
-
-    def addnode(node: int) -> None:
-        """
-        Recursive function to assemble the list of upstream unit catchments.
-
-        Traverses the river network upstream using the up1, up2, up3, up4 fields
-        in rivers_gdf, which contain the COMIDs of upstream tributaries.
-
-        Args:
-            node: COMID of the current catchment to process
-        """
-        # First, append the node to the list
-        upstream_comids.append(node)
-
-        # Next, check whether the fields up1, up2, up3, and up4 contain a node ID
-        # A value of 0 means no upstream connection
-        up1 = rivers_gdf["up1"].loc[node]
-        if up1 != 0:
-            addnode(up1)
-
-        up2 = rivers_gdf["up2"].loc[node]
-        if up2 != 0:
-            addnode(up2)
-
-        up3 = rivers_gdf["up3"].loc[node]
-        if up3 != 0:
-            addnode(up3)
-
-        up4 = rivers_gdf["up4"].loc[node]
-        if up4 != 0:
-            addnode(up4)
-
-    # Start the recursive traversal
-    addnode(terminal_comid)
+    upstream_comids = collect_upstream_comids(terminal_comid, rivers_gdf)
     logger.info(f"  Found {len(upstream_comids)} unit catchments in watershed")
 
     # Get the upstream area from the rivers dataset
