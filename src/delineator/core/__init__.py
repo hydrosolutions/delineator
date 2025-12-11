@@ -21,12 +21,13 @@ from .delineate import (
     BasinData,
     DelineatedWatershed,
     DelineationError,
+    collect_upstream_comids,
     delineate_outlet,
     get_area,
     load_basin_data,
 )
 from .dissolve import close_holes, dissolve_geopandas, fill_geopandas
-from .merit import split_catchment
+from .merit import compute_snap_threshold, split_catchment
 from .output_writer import FailedOutlet, OutputWriter
 
 __all__ = [
@@ -39,10 +40,12 @@ __all__ = [
     "BasinData",
     "DelineatedWatershed",
     "DelineationError",
+    "collect_upstream_comids",
     "delineate_outlet",
     "get_area",
     "load_basin_data",
     # Raster operations
+    "compute_snap_threshold",
     "split_catchment",
     # Dissolve operations
     "dissolve_geopandas",

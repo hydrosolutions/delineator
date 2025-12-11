@@ -22,6 +22,48 @@ from shapely.geometry import MultiPolygon, Polygon
 logger = logging.getLogger(__name__)
 
 
+def compute_snap_threshold(
+    upstream_area: float | None,
+    is_single_catchment: bool,
+    threshold_single: int = 500,
+    threshold_multiple: int = 5000,
+) -> int:
+    """
+    Compute the pixel threshold for stream snapping based on watershed size.
+
+    The threshold determines the minimum number of upstream pixels required
+    to define a waterway. Smaller watersheds need lower thresholds to find
+    streams, while larger watersheds can use higher thresholds.
+
+    Args:
+        upstream_area: Upstream drainage area in km² (if available).
+            If None, falls back to is_single_catchment logic.
+        is_single_catchment: Whether the watershed consists of a single unit catchment.
+            Used as fallback when upstream_area is None.
+        threshold_single: Threshold to use for single-catchment watersheds (default 500).
+        threshold_multiple: Threshold to use for multi-catchment watersheds (default 5000).
+
+    Returns:
+        Number of pixels to use as the stream snapping threshold.
+    """
+    if upstream_area is not None:
+        # Dynamic threshold based on watershed area (km²)
+        # Small watersheds need lower thresholds to find the stream
+        if upstream_area < 50:
+            return 300  # Very small catchments
+        elif upstream_area < 200:
+            return 500  # Small catchments
+        elif upstream_area < 1000:
+            return 1000  # Medium catchments
+        elif upstream_area < 5000:
+            return 2000  # Large catchments
+        else:
+            return 5000  # Very large catchments
+    else:
+        # Fallback to fixed thresholds based on number of unit catchments
+        return threshold_single if is_single_catchment else threshold_multiple
+
+
 def split_catchment(
     basin: int,
     lat: float,
@@ -170,26 +212,7 @@ def split_catchment(
     # for the minimum number of upstream pixels to define a waterway.
     # Use dynamic threshold based on watershed size (upstream area) if available,
     # otherwise fall back to the old logic based on number of unit catchments.
-    if upstream_area is not None:
-        # Dynamic threshold based on watershed area (km²)
-        # Small watersheds need lower thresholds to find the stream
-        if upstream_area < 50:
-            numpixels = 300  # Very small catchments
-        elif upstream_area < 200:
-            numpixels = 500  # Small catchments
-        elif upstream_area < 1000:
-            numpixels = 1000  # Medium catchments
-        elif upstream_area < 5000:
-            numpixels = 2000  # Large catchments
-        else:
-            numpixels = 5000  # Very large catchments
-    else:
-        # Fallback to fixed thresholds based on number of unit catchments
-        # Default values from the original implementation
-        threshold_single = 500
-        threshold_multiple = 5000
-
-        numpixels = threshold_single if is_single_catchment else threshold_multiple
+    numpixels = compute_snap_threshold(upstream_area, is_single_catchment)
 
     logger.info(f"Using threshold of {numpixels} for number of upstream pixels")
 
