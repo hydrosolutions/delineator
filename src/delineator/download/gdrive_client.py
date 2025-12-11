@@ -250,11 +250,15 @@ def list_available_files(
 
     try:
         # Query all files in the folder
-        results = service.files().list(
-            q=f"'{folder_id}' in parents and trashed=false",
-            fields="files(id, name, mimeType, size)",
-            pageSize=1000,  # Get up to 1000 files at once
-        ).execute()
+        results = (
+            service.files()
+            .list(
+                q=f"'{folder_id}' in parents and trashed=false",
+                fields="files(id, name, mimeType, size)",
+                pageSize=1000,  # Get up to 1000 files at once
+            )
+            .execute()
+        )
 
         files = results.get("files", [])
         logger.info(f"Found {len(files)} files in folder")
@@ -279,17 +283,13 @@ def _validate_basin(basin: int) -> None:
     # Pfafstetter Level 2 codes range from 11 to 91 (digits 1-9 only, no 0)
     if basin < 11 or basin > 99:
         raise ValueError(
-            f"Invalid basin code: {basin}. "
-            f"Must be a valid Pfafstetter Level 2 code (11-91, no 0 in digits)"
+            f"Invalid basin code: {basin}. Must be a valid Pfafstetter Level 2 code (11-91, no 0 in digits)"
         )
 
     # Check that both digits are 1-9 (no zeros in Pfafstetter codes)
     basin_str = f"{basin:02d}"
     if "0" in basin_str:
-        raise ValueError(
-            f"Invalid basin code: {basin}. "
-            f"Pfafstetter codes cannot contain 0"
-        )
+        raise ValueError(f"Invalid basin code: {basin}. Pfafstetter codes cannot contain 0")
 
 
 def _validate_folder_id() -> None:
@@ -352,8 +352,7 @@ def _get_credentials(credentials_path: Path | None) -> Credentials | ServiceAcco
     except Exception as e:
         logger.debug(f"Not a service account credential file: {e}")
         raise GoogleAuthError(
-            f"Failed to load credentials from {credentials_path}. "
-            f"Ensure it is a valid service account JSON file."
+            f"Failed to load credentials from {credentials_path}. Ensure it is a valid service account JSON file."
         ) from e
 
 
@@ -392,11 +391,15 @@ def _find_file_id(service, folder_id: str, filename: str) -> str | None:
     try:
         # Query for file by name in folder
         query = f"name='{filename}' and '{folder_id}' in parents and trashed=false"
-        results = service.files().list(
-            q=query,
-            fields="files(id, name)",
-            pageSize=10,
-        ).execute()
+        results = (
+            service.files()
+            .list(
+                q=query,
+                fields="files(id, name)",
+                pageSize=10,
+            )
+            .execute()
+        )
 
         files = results.get("files", [])
 
@@ -607,5 +610,6 @@ def _download_and_extract(
         # Clean up failed extraction
         if extract_dir.exists():
             import shutil
+
             shutil.rmtree(extract_dir)
         raise

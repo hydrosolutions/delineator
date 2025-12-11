@@ -31,12 +31,8 @@ class DownloadResult:
     """Results from a data download operation."""
 
     basins_downloaded: list[int] = field(default_factory=list)
-    rasters: dict[int, dict[str, Path]] = field(
-        default_factory=dict
-    )  # basin -> {flowdir: path, accum: path}
-    vectors: dict[int, dict[str, Path]] = field(
-        default_factory=dict
-    )  # basin -> {catchments: path, rivers: path}
+    rasters: dict[int, dict[str, Path]] = field(default_factory=dict)  # basin -> {flowdir: path, accum: path}
+    vectors: dict[int, dict[str, Path]] = field(default_factory=dict)  # basin -> {catchments: path, rivers: path}
     simplified_catchments: Path | None = None
     errors: list[str] = field(default_factory=list)
 
@@ -240,9 +236,7 @@ def download_data(
         # Extract from bbox
         assert bbox is not None  # For type checker
         min_lon, min_lat, max_lon, max_lat = bbox
-        logger.info(
-            f"Finding basins for bbox: ({min_lon}, {min_lat}, {max_lon}, {max_lat})"
-        )
+        logger.info(f"Finding basins for bbox: ({min_lon}, {min_lat}, {max_lon}, {max_lat})")
         try:
             basins = get_basins_for_bbox(min_lon, min_lat, max_lon, max_lat)
             if not basins:
@@ -299,9 +293,7 @@ def download_data(
         logger.info("=" * 60)
 
         try:
-            simplified_path = download_simplified_catchments(
-                dest_dir=paths["simplified"], overwrite=overwrite
-            )
+            simplified_path = download_simplified_catchments(dest_dir=paths["simplified"], overwrite=overwrite)
             result.simplified_catchments = simplified_path
             logger.info("Successfully downloaded simplified catchments")
         except Exception as e:

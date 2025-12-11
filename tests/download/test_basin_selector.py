@@ -48,10 +48,7 @@ class TestBasinSelector:
                 basin_codes.append(tens * 10 + ones)
 
         # Create simple polygons for each basin
-        geometries = [
-            box(-180 + i * 4, -90, -180 + i * 4 + 3, -85)
-            for i in range(len(basin_codes))
-        ]
+        geometries = [box(-180 + i * 4, -90, -180 + i * 4 + 3, -85) for i in range(len(basin_codes))]
 
         gdf = gpd.GeoDataFrame(
             {"BASIN": basin_codes[:61]},  # Take first 61 codes
@@ -185,9 +182,7 @@ class TestBasinSelector:
         custom_path = Path("/custom/path/basins.shp")
 
         with patch("delineator.download.basin_selector._load_basins_gdf", return_value=mock_basins_gdf) as mock_load:
-            get_basins_for_bbox(
-                min_lon=-25, min_lat=63, max_lon=-13, max_lat=67, basins_shapefile=custom_path
-            )
+            get_basins_for_bbox(min_lon=-25, min_lat=63, max_lon=-13, max_lat=67, basins_shapefile=custom_path)
 
             # Verify custom path was used
             mock_load.assert_called_once_with(str(custom_path))
@@ -407,12 +402,11 @@ class TestDownloader:
         """Should download data for provided basin codes."""
         basins = [42, 45]
 
-        with patch("delineator.download.downloader.validate_basin_codes", return_value=basins), patch(
-            "delineator.download.downloader.download_rasters_for_basins", return_value=({}, [])
-        ) as mock_rasters, patch(
-            "delineator.download.downloader.download_vectors_for_basins", return_value=({}, [])
-        ), patch(
-            "delineator.download.downloader.download_simplified_catchments"
+        with (
+            patch("delineator.download.downloader.validate_basin_codes", return_value=basins),
+            patch("delineator.download.downloader.download_rasters_for_basins", return_value=({}, [])) as mock_rasters,
+            patch("delineator.download.downloader.download_vectors_for_basins", return_value=({}, [])),
+            patch("delineator.download.downloader.download_simplified_catchments"),
         ):
             download_data(basins=basins, output_dir=tmp_path)
 
@@ -425,12 +419,11 @@ class TestDownloader:
         bbox = (-25.0, 63.0, -13.0, 67.0)
         expected_basins = [27]
 
-        with patch("delineator.download.downloader.get_basins_for_bbox", return_value=expected_basins) as mock_bbox, patch(
-            "delineator.download.downloader.download_rasters_for_basins", return_value=({}, [])
-        ) as mock_rasters, patch(
-            "delineator.download.downloader.download_vectors_for_basins", return_value=({}, [])
-        ), patch(
-            "delineator.download.downloader.download_simplified_catchments"
+        with (
+            patch("delineator.download.downloader.get_basins_for_bbox", return_value=expected_basins) as mock_bbox,
+            patch("delineator.download.downloader.download_rasters_for_basins", return_value=({}, [])) as mock_rasters,
+            patch("delineator.download.downloader.download_vectors_for_basins", return_value=({}, [])),
+            patch("delineator.download.downloader.download_simplified_catchments"),
         ):
             download_data(bbox=bbox, output_dir=tmp_path)
 
@@ -445,12 +438,12 @@ class TestDownloader:
         bbox = (-25.0, 63.0, -13.0, 67.0)
         basins = [42, 45]
 
-        with patch("delineator.download.downloader.validate_basin_codes", return_value=basins), patch(
-            "delineator.download.downloader.get_basins_for_bbox"
-        ) as mock_bbox, patch("delineator.download.downloader.download_rasters_for_basins", return_value=({}, [])), patch(
-            "delineator.download.downloader.download_vectors_for_basins", return_value=({}, [])
-        ), patch(
-            "delineator.download.downloader.download_simplified_catchments"
+        with (
+            patch("delineator.download.downloader.validate_basin_codes", return_value=basins),
+            patch("delineator.download.downloader.get_basins_for_bbox") as mock_bbox,
+            patch("delineator.download.downloader.download_rasters_for_basins", return_value=({}, [])),
+            patch("delineator.download.downloader.download_vectors_for_basins", return_value=({}, [])),
+            patch("delineator.download.downloader.download_simplified_catchments"),
         ):
             download_data(bbox=bbox, basins=basins, output_dir=tmp_path)
 
@@ -485,13 +478,12 @@ class TestDownloader:
         """Should respect include_rasters, include_vectors, include_simplified flags."""
         basins = [42]
 
-        with patch("delineator.download.downloader.validate_basin_codes", return_value=basins), patch(
-            "delineator.download.downloader.download_rasters_for_basins", return_value=({}, [])
-        ) as mock_rasters, patch(
-            "delineator.download.downloader.download_vectors_for_basins", return_value=({}, [])
-        ) as mock_vectors, patch(
-            "delineator.download.downloader.download_simplified_catchments"
-        ) as mock_simplified:
+        with (
+            patch("delineator.download.downloader.validate_basin_codes", return_value=basins),
+            patch("delineator.download.downloader.download_rasters_for_basins", return_value=({}, [])) as mock_rasters,
+            patch("delineator.download.downloader.download_vectors_for_basins", return_value=({}, [])) as mock_vectors,
+            patch("delineator.download.downloader.download_simplified_catchments") as mock_simplified,
+        ):
             # Download only rasters
             download_data(
                 basins=basins,
@@ -509,13 +501,17 @@ class TestDownloader:
         """Should collect errors from all download operations."""
         basins = [42]
 
-        with patch("delineator.download.downloader.validate_basin_codes", return_value=basins), patch(
-            "delineator.download.downloader.download_rasters_for_basins",
-            return_value=({}, ["Raster error 1", "Raster error 2"]),
-        ), patch(
-            "delineator.download.downloader.download_vectors_for_basins", return_value=({}, ["Vector error 1"])
-        ), patch(
-            "delineator.download.downloader.download_simplified_catchments", side_effect=Exception("Simplified error")
+        with (
+            patch("delineator.download.downloader.validate_basin_codes", return_value=basins),
+            patch(
+                "delineator.download.downloader.download_rasters_for_basins",
+                return_value=({}, ["Raster error 1", "Raster error 2"]),
+            ),
+            patch("delineator.download.downloader.download_vectors_for_basins", return_value=({}, ["Vector error 1"])),
+            patch(
+                "delineator.download.downloader.download_simplified_catchments",
+                side_effect=Exception("Simplified error"),
+            ),
         ):
             result = download_data(basins=basins, output_dir=tmp_path)
 
@@ -544,10 +540,11 @@ class TestDownloader:
         """Should create all output directories before downloading."""
         basins = [42]
 
-        with patch("delineator.download.downloader.validate_basin_codes", return_value=basins), patch(
-            "delineator.download.downloader.download_rasters_for_basins", return_value=({}, [])
-        ), patch("delineator.download.downloader.download_vectors_for_basins", return_value=({}, [])), patch(
-            "delineator.download.downloader.download_simplified_catchments"
+        with (
+            patch("delineator.download.downloader.validate_basin_codes", return_value=basins),
+            patch("delineator.download.downloader.download_rasters_for_basins", return_value=({}, [])),
+            patch("delineator.download.downloader.download_vectors_for_basins", return_value=({}, [])),
+            patch("delineator.download.downloader.download_simplified_catchments"),
         ):
             download_data(basins=basins, output_dir=tmp_path)
 
@@ -565,10 +562,11 @@ class TestDownloader:
             45: {"flowdir": Path("f45.tif"), "accum": Path("a45.tif")},
         }
 
-        with patch("delineator.download.downloader.validate_basin_codes", return_value=basins), patch(
-            "delineator.download.downloader.download_rasters_for_basins", return_value=(rasters_result, [])
-        ), patch("delineator.download.downloader.download_vectors_for_basins", return_value=({}, [])), patch(
-            "delineator.download.downloader.download_simplified_catchments"
+        with (
+            patch("delineator.download.downloader.validate_basin_codes", return_value=basins),
+            patch("delineator.download.downloader.download_rasters_for_basins", return_value=(rasters_result, [])),
+            patch("delineator.download.downloader.download_vectors_for_basins", return_value=({}, [])),
+            patch("delineator.download.downloader.download_simplified_catchments"),
         ):
             result = download_data(basins=basins, output_dir=tmp_path, include_vectors=False)
 
@@ -580,10 +578,11 @@ class TestDownloader:
         basins = [42]
         output_dir_str = str(tmp_path)
 
-        with patch("delineator.download.downloader.validate_basin_codes", return_value=basins), patch(
-            "delineator.download.downloader.download_rasters_for_basins", return_value=({}, [])
-        ), patch("delineator.download.downloader.download_vectors_for_basins", return_value=({}, [])), patch(
-            "delineator.download.downloader.download_simplified_catchments"
+        with (
+            patch("delineator.download.downloader.validate_basin_codes", return_value=basins),
+            patch("delineator.download.downloader.download_rasters_for_basins", return_value=({}, [])),
+            patch("delineator.download.downloader.download_vectors_for_basins", return_value=({}, [])),
+            patch("delineator.download.downloader.download_simplified_catchments"),
         ):
             result = download_data(basins=basins, output_dir=output_dir_str)
 
@@ -605,9 +604,11 @@ class TestDownloadIntegration:
         expected_basins = [27]
 
         # Mock all external dependencies
-        with patch("delineator.download.downloader.get_basins_for_bbox", return_value=expected_basins), patch(
-            "delineator.download.http_client._download_file"
-        ), patch("delineator.download.downloader.gdrive_download_basin_vectors", return_value={}):
+        with (
+            patch("delineator.download.downloader.get_basins_for_bbox", return_value=expected_basins),
+            patch("delineator.download.http_client._download_file"),
+            patch("delineator.download.downloader.gdrive_download_basin_vectors", return_value={}),
+        ):
             result = download_data(bbox=bbox, output_dir=tmp_path)
 
             # Should complete successfully
@@ -627,10 +628,11 @@ class TestDownloadIntegration:
             errors = ["Failed to download rasters for basin 45", "Failed to download rasters for basin 67"]
             return results, errors
 
-        with patch("delineator.download.downloader.validate_basin_codes", return_value=basins), patch(
-            "delineator.download.downloader.download_rasters_for_basins", side_effect=mock_rasters_download
-        ), patch("delineator.download.downloader.download_vectors_for_basins", return_value=({}, [])), patch(
-            "delineator.download.downloader.download_simplified_catchments"
+        with (
+            patch("delineator.download.downloader.validate_basin_codes", return_value=basins),
+            patch("delineator.download.downloader.download_rasters_for_basins", side_effect=mock_rasters_download),
+            patch("delineator.download.downloader.download_vectors_for_basins", return_value=({}, [])),
+            patch("delineator.download.downloader.download_simplified_catchments"),
         ):
             result = download_data(basins=basins, output_dir=tmp_path)
 

@@ -17,7 +17,10 @@ import geopandas as gpd
 from shapely.geometry import box
 
 # Default path to the Level 2 basins shapefile
-DEFAULT_BASINS_SHAPEFILE = "data/shp/basins_level2/merit_hydro_vect_level2.shp"
+# Use absolute path relative to module location for portability
+_MODULE_DIR = Path(__file__).parent
+_PROJECT_ROOT = _MODULE_DIR.parent.parent.parent
+DEFAULT_BASINS_SHAPEFILE = str(_PROJECT_ROOT / "data" / "shp" / "basins_level2" / "merit_hydro_vect_level2.shp")
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -43,9 +46,7 @@ def _load_basins_gdf(basins_shapefile: str) -> gpd.GeoDataFrame:
     basins_path = Path(basins_shapefile)
 
     if not basins_path.exists():
-        raise FileNotFoundError(
-            f"Basins shapefile not found: {basins_shapefile}"
-        )
+        raise FileNotFoundError(f"Basins shapefile not found: {basins_shapefile}")
 
     logger.info(f"Loading basins from: {basins_shapefile}")
     gdf = gpd.read_file(basins_shapefile)
@@ -58,8 +59,7 @@ def _load_basins_gdf(basins_shapefile: str) -> gpd.GeoDataFrame:
     # Validate that we loaded the correct shapefile
     if "BASIN" not in gdf.columns:
         raise ValueError(
-            f"Shapefile {basins_shapefile} does not contain 'BASIN' column. "
-            f"Available columns: {gdf.columns.tolist()}"
+            f"Shapefile {basins_shapefile} does not contain 'BASIN' column. Available columns: {gdf.columns.tolist()}"
         )
 
     return gdf
@@ -102,13 +102,9 @@ def get_basins_for_bbox(
     """
     # Validate bounding box
     if min_lon >= max_lon:
-        raise ValueError(
-            f"Invalid bbox: min_lon ({min_lon}) must be less than max_lon ({max_lon})"
-        )
+        raise ValueError(f"Invalid bbox: min_lon ({min_lon}) must be less than max_lon ({max_lon})")
     if min_lat >= max_lat:
-        raise ValueError(
-            f"Invalid bbox: min_lat ({min_lat}) must be less than max_lat ({max_lat})"
-        )
+        raise ValueError(f"Invalid bbox: min_lat ({min_lat}) must be less than max_lat ({max_lat})")
 
     # Use default shapefile if none provided
     basins_shapefile = DEFAULT_BASINS_SHAPEFILE if basins_shapefile is None else str(basins_shapefile)
@@ -119,10 +115,7 @@ def get_basins_for_bbox(
     # Create bbox geometry
     bbox_geom = box(min_lon, min_lat, max_lon, max_lat)
 
-    logger.debug(
-        f"Finding basins intersecting bbox: "
-        f"({min_lon}, {min_lat}, {max_lon}, {max_lat})"
-    )
+    logger.debug(f"Finding basins intersecting bbox: ({min_lon}, {min_lat}, {max_lon}, {max_lat})")
 
     # Find intersecting basins
     intersecting = basins_gdf[basins_gdf.geometry.intersects(bbox_geom)]
@@ -197,10 +190,7 @@ def validate_basin_codes(codes: list[int]) -> list[int]:
     if invalid_codes:
         min_code = min(all_codes)
         max_code = max(all_codes)
-        raise ValueError(
-            f"Invalid basin codes: {invalid_codes}. "
-            f"Valid codes range from {min_code} to {max_code}."
-        )
+        raise ValueError(f"Invalid basin codes: {invalid_codes}. Valid codes range from {min_code} to {max_code}.")
 
     logger.debug(f"Validated {len(codes)} basin code(s)")
 

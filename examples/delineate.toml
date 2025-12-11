@@ -1,0 +1,21 @@
+# Example master configuration for the delineator CLI
+# This file demonstrates the structure of delineate.toml
+
+[settings]
+output_dir = "./output"      # Base output directory for all delineated watersheds
+max_fails = 100              # Stop after 100 failures (optional, default: unlimited)
+
+# Define regions to process
+# Each region has a name (used for hive partitioning) and a path to outlets file
+
+[[regions]]
+name = "camels_us"
+outlets = "camels_us.toml"   # Relative paths are resolved relative to this config file
+
+[[regions]]
+name = "camels_br"
+outlets = "camels_br.toml"
+
+[[regions]]
+name = "camels_gb"
+outlets = "camels_gb.toml"

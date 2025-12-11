@@ -1,0 +1,33 @@
+# Example outlets configuration for CAMELS-US region
+# Each outlet represents a stream gauge where a watershed will be delineated
+# All coordinates are in WGS84 (EPSG:4326)
+
+[[outlets]]
+gauge_id = "us_001"
+lat = 40.5416
+lng = -105.2083
+gauge_name = "Cache la Poudre River at Rustic"
+
+[[outlets]]
+gauge_id = "us_002"
+lat = 39.7392
+lng = -105.0002
+gauge_name = "South Platte River at Denver"
+
+[[outlets]]
+gauge_id = "us_003"
+lat = 41.3128
+lng = -106.1497
+gauge_name = "North Platte River near Walden"
+
+[[outlets]]
+gauge_id = "us_004"
+lat = 38.8339
+lng = -106.9878
+gauge_name = "Taylor River at Almont"
+
+[[outlets]]
+gauge_id = "us_005"
+lat = 37.2753
+lng = -108.5844
+gauge_name = "Dolores River near Dolores"

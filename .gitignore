@@ -12,3 +12,9 @@ plots/*
 .venv/
 
 data/
+
+# Cached data
+pkl/
+
+# Generated documentation (not tracked)
+docs/
