@@ -108,9 +108,31 @@ def run_command(
         bool,
         typer.Option("--verbose", "-v", help="Show detailed progress"),
     ] = False,
+    skip_existing: Annotated[
+        bool,
+        typer.Option("--skip-existing", help="Skip outlets already present in output file"),
+    ] = False,
+    force: Annotated[
+        bool,
+        typer.Option("--force", "-f", help="Overwrite existing output files"),
+    ] = False,
+    skip_failed: Annotated[
+        bool,
+        typer.Option("--skip-failed", help="Skip outlets that previously failed (in FAILED.csv)"),
+    ] = False,
+    file_format: Annotated[
+        str,
+        typer.Option("--file-format", help="Output file format: 'gpkg' (GeoPackage) or 'shp' (Shapefile)"),
+    ] = "gpkg",
 ) -> None:
     """
     Run watershed delineation for outlets defined in CONFIG_FILE.
+
+    \b
+    RESUME MODES:
+        By default, the command fails if output files already exist.
+        Use --skip-existing to process only new outlets (resume an interrupted run).
+        Use --force to overwrite all existing outputs.
 
     \b
     CONFIG FILE FORMAT (delineate.toml):
@@ -136,6 +158,9 @@ def run_command(
         delineator run config.toml --dry-run
         delineator run config.toml -o ./output --max-fails 10
         delineator run config.toml --no-download
+        delineator run config.toml --skip-existing    # Resume interrupted run
+        delineator run config.toml --force            # Overwrite existing
+        delineator run config.toml --file-format shp  # Output as Shapefile
     """
     # Setup logging
     _setup_logging(verbose=verbose, quiet=quiet)
@@ -144,6 +169,25 @@ def run_command(
     if output_format not in ["text", "json"]:
         console.print(f"[red]Error:[/red] Invalid output format '{output_format}'. Must be 'text' or 'json'.")
         raise typer.Exit(2)
+
+    # Validate new flags
+    if skip_existing and force:
+        console.print(
+            "[red]Error:[/red] --skip-existing and --force are mutually exclusive\n\n"
+            "[yellow]Use one of:[/yellow]\n"
+            "  --skip-existing  Skip already-processed outlets\n"
+            "  --force          Overwrite all existing outputs"
+        )
+        raise typer.Exit(2)
+
+    if file_format not in ["gpkg", "shp"]:
+        console.print(f"[red]Error:[/red] Invalid file format '{file_format}'. Must be 'gpkg' or 'shp'.")
+        raise typer.Exit(2)
+
+    # Convert file_format string to OutputFormat enum
+    from delineator.core.output_writer import OutputFormat
+
+    output_file_format = OutputFormat.GEOPACKAGE if file_format == "gpkg" else OutputFormat.SHAPEFILE
 
     # Auto-detect format if output is being piped
     if output_format == "text" and not sys.stdout.isatty():
@@ -275,11 +319,32 @@ def run_command(
 
         # Create output directories and writer
         output_dir_path.mkdir(parents=True, exist_ok=True)
-        writer = OutputWriter(output_dir_path)
+        writer = OutputWriter(output_dir_path, output_format=output_file_format)
+
+        # Fail-safe check: error if outputs exist and neither --skip-existing nor --force
+        if not skip_existing and not force:
+            existing_regions = [r.name for r in config.regions if writer.check_output_exists(r.name)]
+            if existing_regions:
+                console.print(
+                    f"[red]Error:[/red] Output already exists for regions: {', '.join(existing_regions)}\n\n"
+                    "[yellow]Choose one:[/yellow]\n"
+                    "  --skip-existing  Resume: skip already-processed outlets\n"
+                    "  --force          Overwrite: re-process all outlets\n\n"
+                    "See 'delineator run --help' for more information."
+                )
+                raise typer.Exit(2)
+
+        # Load failed gauge_ids if --skip-failed is set
+        failed_gauge_ids: set[str] = set()
+        if skip_failed:
+            failed_gauge_ids = writer.load_failed_gauge_ids()
+            if failed_gauge_ids and not quiet:
+                console.print(f"[cyan]Found {len(failed_gauge_ids)} previously failed outlets to skip[/cyan]")
 
         # Track processing statistics
         total_processed = 0
         total_failed = 0
+        total_skipped = 0
         fail_count = 0
         max_fails_value = max_fails or config.settings.max_fails
 
@@ -302,8 +367,31 @@ def run_command(
             outlets = load_outlets(outlets_path)
             region_watersheds: list[DelineatedWatershed] = []
             region_failed = 0
+            region_skipped = 0
+
+            # Load existing gauge_ids for this region (if --skip-existing)
+            existing_gauge_ids: set[str] = set()
+            if skip_existing:
+                existing_gauge_ids = writer.read_existing_gauge_ids(region_name)
+                if existing_gauge_ids and not quiet:
+                    console.print(f"  Found {len(existing_gauge_ids)} existing outlets to skip")
 
             for outlet_idx, outlet in enumerate(outlets, 1):
+                # Skip logic
+                if skip_existing and outlet.gauge_id in existing_gauge_ids:
+                    region_skipped += 1
+                    total_skipped += 1
+                    if verbose and not quiet:
+                        console.print(f"  [dim]⊘ {outlet.gauge_id}: skipped (already exists)[/dim]")
+                    continue
+
+                if skip_failed and outlet.gauge_id in failed_gauge_ids:
+                    region_skipped += 1
+                    total_skipped += 1
+                    if verbose and not quiet:
+                        console.print(f"  [dim]⊘ {outlet.gauge_id}: skipped (previously failed)[/dim]")
+                    continue
+
                 # Simple progress indicator
                 if not quiet and not verbose and (outlet_idx % 10 == 0 or outlet_idx == len(outlets)):
                     console.print(f"  Processing outlet {outlet_idx}/{len(outlets)}...", end="\r")
@@ -395,7 +483,11 @@ def run_command(
                             f"partial results for {region_name}...[/yellow]"
                         )
                         try:
-                            partial_path = writer.write_region_shapefile(f"{region_name}_PARTIAL", region_watersheds)
+                            # Use append mode if we're resuming
+                            write_mode = "a" if (skip_existing and existing_gauge_ids) else "w"
+                            partial_path = writer.write_region_output(
+                                f"{region_name}_PARTIAL", region_watersheds, mode=write_mode
+                            )
                             console.print(f"  [green]✓[/green] Partial results saved to {partial_path}")
                         except Exception as write_err:
                             logger.error(f"Failed to save partial results: {write_err}")
@@ -408,22 +500,34 @@ def run_command(
                 f"{len(region_watersheds)} succeeded, {region_failed} failed"
             )
 
-            # Write region shapefile if any watersheds succeeded
+            # Write region output if any watersheds succeeded
             if region_watersheds:
                 logger.info(f"Writing {len(region_watersheds)} watersheds for region '{region_name}'")
                 try:
-                    shapefile_path = writer.write_region_shapefile(region_name, region_watersheds)
-                    logger.info(f"Successfully wrote shapefile: {shapefile_path}")
+                    # Use append mode when resuming (skip_existing and outputs already exist)
+                    write_mode = "a" if (skip_existing and existing_gauge_ids) else "w"
+                    output_path = writer.write_region_output(region_name, region_watersheds, mode=write_mode)
+                    logger.info(f"Successfully wrote output: {output_path}")
                     if not quiet:
-                        console.print(f"  [green]✓[/green] {len(region_watersheds)} succeeded, {region_failed} failed")
-                        console.print(f"    → {shapefile_path}")
+                        msg = f"  [green]✓[/green] {len(region_watersheds)} succeeded"
+                        if region_skipped > 0:
+                            msg += f", {region_skipped} skipped"
+                        if region_failed > 0:
+                            msg += f", {region_failed} failed"
+                        console.print(msg)
+                        console.print(f"    → {output_path}")
                 except Exception as e:
-                    logger.exception(f"Failed to write shapefile for region '{region_name}'")
-                    console.print(f"  [red]✗[/red] Failed to write shapefile: {e}")
+                    logger.exception(f"Failed to write output for region '{region_name}'")
+                    console.print(f"  [red]✗[/red] Failed to write output: {e}")
                     # Continue to next region instead of aborting entire batch
             else:
                 if not quiet:
-                    console.print(f"  [red]✗[/red] All {region_failed} outlets failed")
+                    if region_skipped > 0 and region_failed == 0:
+                        console.print(f"  [green]✓[/green] All {region_skipped} outlets skipped (already exist)")
+                    elif region_skipped > 0:
+                        console.print(f"  [yellow]![/yellow] {region_skipped} skipped, {region_failed} failed")
+                    else:
+                        console.print(f"  [red]✗[/red] All {region_failed} outlets failed")
 
         # Finalize output (write FAILED.csv)
         failed_csv_path = writer.finalize()
@@ -431,7 +535,11 @@ def run_command(
         # Print summary
         if not quiet:
             console.print("\n[bold]Complete![/bold]")
-            console.print(f"  Total: [bold]{total_processed}[/bold] succeeded, [bold]{total_failed}[/bold] failed")
+            summary_msg = f"  Total: [bold]{total_processed}[/bold] succeeded"
+            if total_skipped > 0:
+                summary_msg += f", [bold]{total_skipped}[/bold] skipped"
+            summary_msg += f", [bold]{total_failed}[/bold] failed"
+            console.print(summary_msg)
             if failed_csv_path:
                 console.print(f"  Failed outlets logged to: [yellow]{failed_csv_path}[/yellow]")
 

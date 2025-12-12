@@ -28,7 +28,7 @@ from .delineate import (
 )
 from .dissolve import close_holes, dissolve_geopandas, fill_geopandas
 from .merit import compute_snap_threshold, split_catchment
-from .output_writer import FailedOutlet, OutputWriter
+from .output_writer import FailedOutlet, OutputFormat, OutputWriter
 
 __all__ = [
     # Data availability
@@ -55,5 +55,6 @@ __all__ = [
     "get_country",
     # Output writing
     "FailedOutlet",
+    "OutputFormat",
     "OutputWriter",
 ]

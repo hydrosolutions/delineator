@@ -12,7 +12,7 @@ import pytest
 from shapely.geometry import Polygon
 
 from delineator.core.delineate import DelineatedWatershed
-from delineator.core.output_writer import FailedOutlet, OutputWriter
+from delineator.core.output_writer import FailedOutlet, OutputFormat, OutputWriter
 
 
 @pytest.fixture
@@ -98,11 +98,22 @@ class TestOutputWriter:
 
     def test_get_region_output_dir_creates_structure(self, tmp_path: Path) -> None:
         """Test that get_region_output_dir creates Hive-partitioned structure."""
-        writer = OutputWriter(output_dir=tmp_path)
+        writer = OutputWriter(output_dir=tmp_path, output_format=OutputFormat.SHAPEFILE)
 
         result = writer.get_region_output_dir("test_region")
 
         expected = tmp_path / "REGION_NAME=test_region" / "data_type=shapefiles"
+        assert result == expected
+        assert result.exists()
+        assert result.is_dir()
+
+    def test_get_region_output_dir_creates_geopackage_structure(self, tmp_path: Path) -> None:
+        """Test that get_region_output_dir creates GeoPackage structure by default."""
+        writer = OutputWriter(output_dir=tmp_path)
+
+        result = writer.get_region_output_dir("test_region")
+
+        expected = tmp_path / "REGION_NAME=test_region" / "data_type=geopackage"
         assert result == expected
         assert result.exists()
         assert result.is_dir()
@@ -121,7 +132,7 @@ class TestOutputWriter:
         self, tmp_path: Path, sample_watershed: DelineatedWatershed
     ) -> None:
         """Test that shapefile is created."""
-        writer = OutputWriter(output_dir=tmp_path)
+        writer = OutputWriter(output_dir=tmp_path, output_format=OutputFormat.SHAPEFILE)
 
         result = writer.write_region_shapefile(
             region_name="test_region",
@@ -134,11 +145,26 @@ class TestOutputWriter:
         assert (result.parent / "test_region_shapes.dbf").exists()
         assert (result.parent / "test_region_shapes.shx").exists()
 
+    def test_write_region_output_creates_geopackage(
+        self, tmp_path: Path, sample_watershed: DelineatedWatershed
+    ) -> None:
+        """Test that GeoPackage is created by default."""
+        writer = OutputWriter(output_dir=tmp_path)
+
+        result = writer.write_region_output(
+            region_name="test_region",
+            watersheds=[sample_watershed],
+        )
+
+        assert result.exists()
+        assert result.name == "test_region.gpkg"
+        assert result.suffix == ".gpkg"
+
     def test_write_region_shapefile_correct_path(
         self, tmp_path: Path, sample_watershed: DelineatedWatershed
     ) -> None:
         """Test that shapefile is written to Hive-partitioned path."""
-        writer = OutputWriter(output_dir=tmp_path)
+        writer = OutputWriter(output_dir=tmp_path, output_format=OutputFormat.SHAPEFILE)
 
         result = writer.write_region_shapefile(
             region_name="my_region",
@@ -347,3 +373,136 @@ class TestIntegration:
             reader = csv.reader(f)
             rows = list(reader)
         assert len(rows) == 3  # Header + 2 failures
+
+
+class TestReadExistingGaugeIds:
+    """Tests for reading existing gauge_ids from output files."""
+
+    def test_returns_empty_set_when_no_file(self, tmp_path: Path) -> None:
+        """Test that empty set is returned when output file doesn't exist."""
+        writer = OutputWriter(output_dir=tmp_path)
+
+        result = writer.read_existing_gauge_ids("nonexistent_region")
+
+        assert result == set()
+
+    def test_returns_gauge_ids_from_geopackage(
+        self, tmp_path: Path, multiple_watersheds: list[DelineatedWatershed]
+    ) -> None:
+        """Test reading gauge_ids from existing GeoPackage."""
+        writer = OutputWriter(output_dir=tmp_path)
+
+        # Write some watersheds
+        writer.write_region_output("test_region", multiple_watersheds)
+
+        # Read back gauge_ids
+        result = writer.read_existing_gauge_ids("test_region")
+
+        assert result == {"ws_001", "ws_002"}
+
+    def test_returns_gauge_ids_from_shapefile(
+        self, tmp_path: Path, multiple_watersheds: list[DelineatedWatershed]
+    ) -> None:
+        """Test reading gauge_ids from existing Shapefile."""
+        writer = OutputWriter(output_dir=tmp_path, output_format=OutputFormat.SHAPEFILE)
+
+        # Write some watersheds
+        writer.write_region_output("test_region", multiple_watersheds)
+
+        # Read back gauge_ids
+        result = writer.read_existing_gauge_ids("test_region")
+
+        assert result == {"ws_001", "ws_002"}
+
+
+class TestCheckOutputExists:
+    """Tests for checking if output exists."""
+
+    def test_returns_false_when_no_file(self, tmp_path: Path) -> None:
+        """Test that False is returned when no output file."""
+        writer = OutputWriter(output_dir=tmp_path)
+
+        result = writer.check_output_exists("nonexistent_region")
+
+        assert result is False
+
+    def test_returns_true_when_file_exists(
+        self, tmp_path: Path, sample_watershed: DelineatedWatershed
+    ) -> None:
+        """Test that True is returned when output file exists."""
+        writer = OutputWriter(output_dir=tmp_path)
+
+        # Write a watershed
+        writer.write_region_output("test_region", [sample_watershed])
+
+        result = writer.check_output_exists("test_region")
+
+        assert result is True
+
+
+class TestLoadFailedGaugeIds:
+    """Tests for loading failed gauge_ids from FAILED.csv."""
+
+    def test_returns_empty_set_when_no_file(self, tmp_path: Path) -> None:
+        """Test that empty set is returned when FAILED.csv doesn't exist."""
+        writer = OutputWriter(output_dir=tmp_path)
+
+        result = writer.load_failed_gauge_ids()
+
+        assert result == set()
+
+    def test_returns_gauge_ids_from_failed_csv(self, tmp_path: Path) -> None:
+        """Test reading gauge_ids from existing FAILED.csv."""
+        writer = OutputWriter(output_dir=tmp_path)
+
+        # Create FAILED.csv
+        writer.record_failure("region1", "fail_001", 40.0, -105.0, "Error 1")
+        writer.record_failure("region2", "fail_002", 41.0, -106.0, "Error 2")
+        writer.write_failed_csv()
+
+        # Create fresh writer (simulating restart)
+        writer2 = OutputWriter(output_dir=tmp_path)
+        result = writer2.load_failed_gauge_ids()
+
+        assert result == {"fail_001", "fail_002"}
+
+
+class TestGeoPackageAppendMode:
+    """Tests for GeoPackage append mode."""
+
+    def test_append_mode_adds_to_existing(
+        self, tmp_path: Path, multiple_watersheds: list[DelineatedWatershed]
+    ) -> None:
+        """Test that append mode adds to existing GeoPackage."""
+        writer = OutputWriter(output_dir=tmp_path)
+
+        # Write first watershed
+        writer.write_region_output("test_region", [multiple_watersheds[0]], mode="w")
+
+        # Append second watershed
+        writer.write_region_output("test_region", [multiple_watersheds[1]], mode="a")
+
+        # Read back and verify
+        import geopandas as gpd
+
+        output_path = writer.get_output_path("test_region")
+        gdf = gpd.read_file(output_path)
+        assert len(gdf) == 2
+        assert set(gdf["gauge_id"]) == {"ws_001", "ws_002"}
+
+    def test_append_mode_creates_if_not_exists(
+        self, tmp_path: Path, sample_watershed: DelineatedWatershed
+    ) -> None:
+        """Test that append mode creates file if it doesn't exist."""
+        writer = OutputWriter(output_dir=tmp_path)
+
+        # Append to non-existent file should create it
+        writer.write_region_output("new_region", [sample_watershed], mode="a")
+
+        output_path = writer.get_output_path("new_region")
+        assert output_path.exists()
+
+        import geopandas as gpd
+
+        gdf = gpd.read_file(output_path)
+        assert len(gdf) == 1

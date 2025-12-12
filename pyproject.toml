@@ -9,6 +9,7 @@ description = "Watershed delineation using MERIT-Hydro data"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "fiona>=1.10.1",
     "geopandas>=1.0.0",
     "google-api-python-client>=2.0",
     "google-auth>=2.0",

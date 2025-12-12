@@ -14,6 +14,8 @@ This module contains core functionality and utilities needed throughout the deli
 - `merit.py` - MERIT-Hydro raster operations for detailed watershed delineation
 - `dissolve.py` - Efficient polygon dissolve and hole-filling operations
 - `country.py` - Country extraction via offline reverse geocoding
+- `output_writer.py` - Output file writing for watersheds and failures (GeoPackage/Shapefile)
+- `delineate.py` - Main delineation algorithm and data structures
 
 ## Key Interfaces
 
@@ -281,9 +283,48 @@ Log messages include:
 - WARNING: Missing data when auto-download is disabled
 - ERROR: Download failures
 
+### Output Writing
+
+```python
+class OutputFormat(str, Enum):
+    """Supported output file formats."""
+    SHAPEFILE = "shp"
+    GEOPACKAGE = "gpkg"  # Default
+```
+
+```python
+class OutputWriter:
+    """Handles output file writing for delineation results."""
+
+    def __init__(
+        self,
+        output_dir: Path,
+        output_format: OutputFormat = OutputFormat.GEOPACKAGE,
+    ) -> None: ...
+```
+
+Key methods:
+- `write_region_output(region_name, watersheds, mode="w")` - Write watersheds to GeoPackage/Shapefile
+- `check_output_exists(region_name)` - Check if output file exists for a region
+- `read_existing_gauge_ids(region_name)` - Load gauge_ids from existing output (for resume)
+- `load_failed_gauge_ids()` - Load gauge_ids from FAILED.csv (for --skip-failed)
+- `record_failure(region_name, gauge_id, lat, lng, error)` - Record a failed delineation
+- `finalize()` - Write FAILED.csv
+
+Output structure (Hive-partitioned):
+```
+output_dir/
+├── REGION_NAME={name}/
+│   └── data_type=geopackage/  # or data_type=shapefiles
+│       └── {name}.gpkg        # or {name}_shapes.shp
+└── FAILED.csv
+```
+
 ## Dependencies
 
 - `pathlib` - File path operations
 - `dataclasses` - Structured data containers
 - `logging` - Diagnostic logging
+- `fiona` - Efficient reading of gauge_ids without loading geometries
+- `geopandas` - GeoDataFrame operations
 - `delineator.download` - Basin selection and data download
