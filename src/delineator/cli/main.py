@@ -238,7 +238,7 @@ def run_command(
                 raise typer.Exit(2)
 
         # Check output directory
-        output_dir_path = Path(config.settings.output_dir)
+        output_dir_path = Path(config.settings.output_dir).resolve()
         if output_dir_path.exists() and not output_dir_path.is_dir():
             console.print(f"[red]Error:[/red] Output path exists but is not a directory: {output_dir_path}")
             raise typer.Exit(2)
@@ -381,12 +381,46 @@ def run_command(
                     fail_count += 1
                     logger.exception(f"Unexpected error delineating {outlet.gauge_id}")
 
+                    # Check max_fails threshold (same as DelineationError handler)
+                    if max_fails_value is not None and fail_count >= max_fails_value:
+                        console.print(f"\n[red]Error:[/red] Reached maximum failures ({max_fails_value})")
+                        raise typer.Exit(2) from None
+
+                except KeyboardInterrupt:
+                    logger.warning(f"Interrupted while processing {outlet.gauge_id}")
+                    # Write partial results for current region before exiting
+                    if region_watersheds:
+                        console.print(
+                            f"\n[yellow]Interrupted! Saving {len(region_watersheds)} "
+                            f"partial results for {region_name}...[/yellow]"
+                        )
+                        try:
+                            partial_path = writer.write_region_shapefile(f"{region_name}_PARTIAL", region_watersheds)
+                            console.print(f"  [green]✓[/green] Partial results saved to {partial_path}")
+                        except Exception as write_err:
+                            logger.error(f"Failed to save partial results: {write_err}")
+                    writer.finalize()
+                    raise typer.Exit(130) from None  # Standard exit code for SIGINT
+
+            # Log region completion
+            logger.info(
+                f"Region '{region_name}' outlet loop complete: "
+                f"{len(region_watersheds)} succeeded, {region_failed} failed"
+            )
+
             # Write region shapefile if any watersheds succeeded
             if region_watersheds:
-                shapefile_path = writer.write_region_shapefile(region_name, region_watersheds)
-                if not quiet:
-                    console.print(f"  [green]✓[/green] {len(region_watersheds)} succeeded, {region_failed} failed")
-                    console.print(f"    → {shapefile_path}")
+                logger.info(f"Writing {len(region_watersheds)} watersheds for region '{region_name}'")
+                try:
+                    shapefile_path = writer.write_region_shapefile(region_name, region_watersheds)
+                    logger.info(f"Successfully wrote shapefile: {shapefile_path}")
+                    if not quiet:
+                        console.print(f"  [green]✓[/green] {len(region_watersheds)} succeeded, {region_failed} failed")
+                        console.print(f"    → {shapefile_path}")
+                except Exception as e:
+                    logger.exception(f"Failed to write shapefile for region '{region_name}'")
+                    console.print(f"  [red]✗[/red] Failed to write shapefile: {e}")
+                    # Continue to next region instead of aborting entire batch
             else:
                 if not quiet:
                     console.print(f"  [red]✗[/red] All {region_failed} outlets failed")
@@ -411,6 +445,10 @@ def run_command(
 
     except typer.Exit:
         raise
+    except KeyboardInterrupt:
+        logger.warning("Process interrupted by user")
+        console.print("\n[yellow]Interrupted by user[/yellow]")
+        raise typer.Exit(130) from None
     except Exception as e:
         logger.exception("Unexpected error during run command")
         console.print(f"\n[red]Error:[/red] {e}")
