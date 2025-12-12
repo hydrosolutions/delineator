@@ -21,3 +21,6 @@ docs/
 
 # HTML coverage reports
 htmlcov/
+
+# Data
+data

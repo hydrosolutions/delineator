@@ -17,6 +17,7 @@ dependencies = [
     "matplotlib>=3.10.6",
     "numpy>=2.3.3",
     "pandas>=2.3.3",
+    "polars>=1.36.1",
     "pydantic>=2.0.0",
     "pyproj>=3.7.2",
     "pysheds>=0.5",
