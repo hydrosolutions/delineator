@@ -249,12 +249,6 @@ def run_command(
                 console.print(f"    - {stat['name']}: {stat['outlets']} outlets")
             console.print(f"[green]✓[/green] Total: {total_outlets:,} outlets")
 
-        # Determine required basins
-        required_basins = get_required_basins(all_outlets)
-
-        if not quiet:
-            console.print(f"[green]✓[/green] Required MERIT basins: {', '.join(map(str, required_basins))}")
-
         # Determine data directory (fallback chain: config -> env var -> derived from output_dir)
         if config.settings.data_dir:
             data_dir = Path(config.settings.data_dir).expanduser()
@@ -262,6 +256,13 @@ def run_command(
             data_dir = Path(os.getenv(ENV_DATA_DIR)).expanduser()
         else:
             data_dir = Path(config.settings.output_dir).parent / "data"
+
+        # Determine required basins
+        required_basins = get_required_basins(all_outlets, data_dir=data_dir)
+
+        if not quiet:
+            console.print(f"[green]✓[/green] Required MERIT basins: {', '.join(map(str, required_basins))}")
+
         availability = check_data_availability(
             basins=required_basins,
             data_dir=data_dir,
@@ -412,7 +413,7 @@ def run_command(
 
                 try:
                     # Determine which basin this outlet is in
-                    outlet_basins = get_required_basins([(outlet.lat, outlet.lng)])
+                    outlet_basins = get_required_basins([(outlet.lat, outlet.lng)], data_dir=data_dir)
                     if not outlet_basins:
                         raise DelineationError(f"Could not determine basin for outlet at ({outlet.lat}, {outlet.lng})")
 

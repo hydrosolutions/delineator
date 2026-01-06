@@ -260,7 +260,10 @@ def ensure_data_available(
     return availability
 
 
-def get_required_basins(outlets: list[tuple[float, float]]) -> list[int]:
+def get_required_basins(
+    outlets: list[tuple[float, float]],
+    data_dir: Path | str | None = None,
+) -> list[int]:
     """
     Given outlet coordinates, determine which Pfafstetter Level 2 basins are needed.
 
@@ -271,6 +274,7 @@ def get_required_basins(outlets: list[tuple[float, float]]) -> list[int]:
 
     Args:
         outlets: List of (latitude, longitude) tuples in decimal degrees
+        data_dir: Base directory containing MERIT-Hydro data. If None, uses default.
 
     Returns:
         List of Pfafstetter Level 2 basin codes needed for the outlets
@@ -311,8 +315,19 @@ def get_required_basins(outlets: list[tuple[float, float]]) -> list[int]:
 
     logger.debug(f"Computed bounding box: ({min_lon}, {min_lat}, {max_lon}, {max_lat})")
 
+    # Compute basins shapefile path from data_dir if provided
+    basins_shapefile = None
+    if data_dir is not None:
+        basins_shapefile = Path(data_dir).expanduser() / "shp" / "basins_level2" / "merit_hydro_vect_level2.shp"
+
     # Get basins intersecting the bounding box
-    basins = get_basins_for_bbox(min_lon=min_lon, min_lat=min_lat, max_lon=max_lon, max_lat=max_lat)
+    basins = get_basins_for_bbox(
+        min_lon=min_lon,
+        min_lat=min_lat,
+        max_lon=max_lon,
+        max_lat=max_lat,
+        basins_shapefile=basins_shapefile,
+    )
 
     logger.info(f"Found {len(basins)} required basin(s): {basins}")
 

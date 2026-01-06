@@ -26,6 +26,21 @@ DEFAULT_BASINS_SHAPEFILE = str(_PROJECT_ROOT / "data" / "shp" / "basins_level2" 
 logger = logging.getLogger(__name__)
 
 
+def _get_basins_shapefile_path(data_dir: Path | str | None = None) -> str:
+    """
+    Get the path to the Level 2 basins shapefile.
+
+    Args:
+        data_dir: Base data directory. If None, uses project-relative default.
+
+    Returns:
+        Path to the basins shapefile as a string.
+    """
+    if data_dir is None:
+        return DEFAULT_BASINS_SHAPEFILE
+    return str(Path(data_dir).expanduser() / "shp" / "basins_level2" / "merit_hydro_vect_level2.shp")
+
+
 @lru_cache(maxsize=1)
 def _load_basins_gdf(basins_shapefile: str) -> gpd.GeoDataFrame:
     """
@@ -151,12 +166,16 @@ def get_basins_for_bbox(
     return basin_codes
 
 
-def get_all_basin_codes() -> list[int]:
+def get_all_basin_codes(data_dir: Path | str | None = None) -> list[int]:
     """
     Return all valid Pfafstetter Level 2 basin codes.
 
     This function reads the basins shapefile and extracts all unique basin codes.
     Useful for operations that need to work with all available basins.
+
+    Args:
+        data_dir: Base data directory containing the basins shapefile.
+            If None, uses the project-relative default location.
 
     Returns:
         List of all basin codes (integers), sorted in ascending order.
@@ -168,7 +187,7 @@ def get_all_basin_codes() -> list[int]:
         >>> all_basins[0]
         11
     """
-    basins_gdf = _load_basins_gdf(DEFAULT_BASINS_SHAPEFILE)
+    basins_gdf = _load_basins_gdf(_get_basins_shapefile_path(data_dir))
 
     # Get all unique basin codes
     basin_codes = basins_gdf["BASIN"].astype(int).unique().tolist()
@@ -179,7 +198,7 @@ def get_all_basin_codes() -> list[int]:
     return basin_codes
 
 
-def validate_basin_codes(codes: list[int]) -> list[int]:
+def validate_basin_codes(codes: list[int], data_dir: Path | str | None = None) -> list[int]:
     """
     Validate that basin codes exist in the basins shapefile.
 
@@ -188,6 +207,8 @@ def validate_basin_codes(codes: list[int]) -> list[int]:
 
     Args:
         codes: List of basin codes to validate
+        data_dir: Base data directory containing the basins shapefile.
+            If None, uses the project-relative default location.
 
     Returns:
         The same list of basin codes (unchanged) if all are valid
@@ -201,7 +222,7 @@ def validate_basin_codes(codes: list[int]) -> list[int]:
         >>> validate_basin_codes([11, 99])  # doctest: +SKIP
         ValueError: Invalid basin codes: [99]. Valid codes range from 11 to 91.
     """
-    all_codes = get_all_basin_codes()
+    all_codes = get_all_basin_codes(data_dir=data_dir)
     all_codes_set = set(all_codes)
 
     # Check for invalid codes

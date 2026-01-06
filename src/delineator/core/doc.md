@@ -65,10 +65,13 @@ def ensure_data_available(
 Check data and optionally download missing data. First checks if all required data files exist. If any files are missing and `auto_download=True`, automatically downloads the missing data using the download module. After download (if triggered), re-checks availability and returns final status.
 
 ```python
-def get_required_basins(outlets: list[tuple[float, float]]) -> list[int]
+def get_required_basins(
+    outlets: list[tuple[float, float]],
+    data_dir: Path | str | None = None,
+) -> list[int]
 ```
 
-Given a list of (latitude, longitude) outlet coordinates, determine which Pfafstetter Level 2 basins are needed. Computes a bounding box around all outlet points and uses the basin selector from the download module to determine which basins intersect that bounding box.
+Given a list of (latitude, longitude) outlet coordinates, determine which Pfafstetter Level 2 basins are needed. The optional `data_dir` parameter specifies where to find the basins shapefile; if not provided, uses the default location. Computes a bounding box around all outlet points and uses the basin selector from the download module to determine which basins intersect that bounding box.
 
 ### MERIT-Hydro Raster Operations
 

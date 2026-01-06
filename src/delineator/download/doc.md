@@ -46,16 +46,16 @@ def get_basins_for_bbox(
 Get Pfafstetter Level 2 basin codes intersecting a bounding box. Uses spatial intersection with the Level 2 basins shapefile (default: `data/shp/basins_level2/merit_hydro_vect_level2.shp`).
 
 ```python
-def get_all_basin_codes() -> list[int]
+def get_all_basin_codes(data_dir: Path | str | None = None) -> list[int]
 ```
 
-Return all 61 valid Pfafstetter Level 2 basin codes (11-91, excluding codes with 0 digits).
+Return all 61 valid Pfafstetter Level 2 basin codes (11-91, excluding codes with 0 digits). The optional `data_dir` parameter specifies where to find the basins shapefile; if not provided, uses the default location.
 
 ```python
-def validate_basin_codes(codes: list[int]) -> list[int]
+def validate_basin_codes(codes: list[int], data_dir: Path | str | None = None) -> list[int]
 ```
 
-Validate that basin codes exist in the basins shapefile. Raises `ValueError` if any codes are invalid.
+Validate that basin codes exist in the basins shapefile. Raises `ValueError` if any codes are invalid. The optional `data_dir` parameter specifies where to find the basins shapefile; if not provided, uses the default location.
 
 ### HTTP Downloads (mghydro.com)
 
