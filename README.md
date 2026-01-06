@@ -85,6 +85,8 @@ delineator run config.toml --dry-run              # Validate config without proc
 delineator run config.toml -o ./output            # Override output directory
 delineator run config.toml --max-fails 10         # Stop after 10 failures
 delineator run config.toml --no-download          # Fail if data is missing (no auto-download)
+delineator run config.toml --fill-threshold 50    # Fill holes smaller than 50 pixels
+delineator run config.toml --fill-threshold 0     # Fill ALL holes (no size limit)
 ```
 
 ### Download MERIT-Hydro data
@@ -120,6 +122,7 @@ Displays all 61 Pfafstetter Level 2 basin codes grouped by continent.
 output_dir = "./output"               # Required: base output directory
 data_dir = "~/data/merit-hydro"       # Optional: path to MERIT-Hydro data (see below)
 max_fails = 100                       # Optional: stop after N failures (default: unlimited)
+fill_threshold = 100                  # Optional: fill holes smaller than N pixels (default: 100, 0 = fill all)
 
 [[regions]]
 name = "region_name"         # Required: used for hive partitioning (region=name/)

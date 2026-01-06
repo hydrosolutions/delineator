@@ -46,6 +46,7 @@ Main watershed delineation command that:
 Options:
 - `--output/-o`: Override output directory
 - `--max-fails`: Stop after N failures
+- `--fill-threshold`: Fill holes smaller than N pixels (default: 100, 0 = fill all)
 - `--dry-run`: Validate without processing
 - `--no-download`: Disable auto-download
 - `--output-format`: text or json output

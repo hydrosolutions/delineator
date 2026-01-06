@@ -18,7 +18,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from .defaults import DEFAULT_GAUGE_NAME, DEFAULT_MAX_FAILS, DEFAULT_OUTPUT_DIR
+from .defaults import DEFAULT_FILL_THRESHOLD, DEFAULT_GAUGE_NAME, DEFAULT_MAX_FAILS, DEFAULT_OUTPUT_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +129,11 @@ class SettingsConfig(BaseModel):
         default=None, description="Directory containing MERIT-Hydro data (overrides DELINEATOR_DATA_DIR env var)"
     )
     max_fails: int | None = Field(default=DEFAULT_MAX_FAILS, description="Stop after N failures (None = unlimited)")
+    fill_threshold: int = Field(
+        default=DEFAULT_FILL_THRESHOLD,
+        ge=0,
+        description="Fill polygon holes smaller than N pixels (0 = fill all)"
+    )
 
     @field_validator("output_dir")
     @classmethod

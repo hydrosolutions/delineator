@@ -9,6 +9,7 @@ and path configurations used throughout the delineator CLI.
 DEFAULT_MAX_FAILS = None  # unlimited
 DEFAULT_OUTPUT_DIR = "./output"
 DEFAULT_DATA_DIR = "data"
+DEFAULT_FILL_THRESHOLD = 100
 
 # Environment variable names for data paths
 ENV_DATA_DIR = "DELINEATOR_DATA_DIR"

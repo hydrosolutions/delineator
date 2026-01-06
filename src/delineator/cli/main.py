@@ -89,6 +89,10 @@ def run_command(
         int | None,
         typer.Option("--max-fails", help="Stop after N failures (overrides config)", min=1),
     ] = None,
+    fill_threshold: Annotated[
+        int | None,
+        typer.Option("--fill-threshold", help="Fill holes smaller than N pixels (overrides config)", min=0),
+    ] = None,
     dry_run: Annotated[
         bool,
         typer.Option("--dry-run", help="Validate configuration without processing"),
@@ -210,6 +214,10 @@ def run_command(
         if max_fails is not None:
             config.settings.max_fails = max_fails
             logger.info(f"Max fails overridden to: {max_fails}")
+
+        if fill_threshold is not None:
+            config.settings.fill_threshold = fill_threshold
+            logger.info(f"Fill threshold overridden to: {fill_threshold}")
 
         # Load all outlets
         all_outlets: list[tuple[float, float]] = []
@@ -428,7 +436,7 @@ def run_command(
                         rivers_gdf=basin_data.rivers_gdf,
                         fdir_dir=fdir_dir,
                         accum_dir=accum_dir,
-                        fill_threshold=100,  # Default from spec
+                        fill_threshold=config.settings.fill_threshold,
                         use_high_res=True,
                     )
 
