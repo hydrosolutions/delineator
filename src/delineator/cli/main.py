@@ -11,6 +11,7 @@ code style guidelines in CLAUDE.md.
 """
 
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Annotated
@@ -19,7 +20,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from delineator.config import load_config, load_outlets
+from delineator.config import ENV_DATA_DIR, load_config, load_outlets
 from delineator.core import (
     BasinData,
     DelineatedWatershed,
@@ -246,8 +247,13 @@ def run_command(
         if not quiet:
             console.print(f"[green]✓[/green] Required MERIT basins: {', '.join(map(str, required_basins))}")
 
-        # Check data availability
-        data_dir = Path(config.settings.output_dir).parent / "data"  # Default data location
+        # Determine data directory (fallback chain: config -> env var -> derived from output_dir)
+        if config.settings.data_dir:
+            data_dir = Path(config.settings.data_dir).expanduser()
+        elif os.getenv(ENV_DATA_DIR):
+            data_dir = Path(os.getenv(ENV_DATA_DIR)).expanduser()
+        else:
+            data_dir = Path(config.settings.output_dir).parent / "data"
         availability = check_data_availability(
             basins=required_basins,
             data_dir=data_dir,

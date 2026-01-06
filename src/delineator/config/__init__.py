@@ -24,6 +24,7 @@ from .defaults import (
     DEFAULT_SIMPLIFIED_PATH,
     ENV_ACCUM_DIR,
     ENV_CATCHMENTS_DIR,
+    ENV_DATA_DIR,
     ENV_FDIR_DIR,
     ENV_RIVERS_DIR,
 )
@@ -58,6 +59,7 @@ __all__ = [
     "DEFAULT_RIVERS_PATH",
     "DEFAULT_SIMPLIFIED_PATH",
     # Environment variables
+    "ENV_DATA_DIR",
     "ENV_FDIR_DIR",
     "ENV_ACCUM_DIR",
     "ENV_CATCHMENTS_DIR",

@@ -9,6 +9,7 @@ Fast, accurate watershed delineation for any point on Earth's land surface using
 ## Overview
 
 Delineator is a Python CLI tool for watershed delineation that combines:
+
 - High-resolution MERIT-Hydro raster data (flow direction and accumulation)
 - MERIT-Basins vector data (unit catchments and river networks)
 - Hybrid vector/raster algorithms for optimal speed and accuracy
@@ -18,6 +19,7 @@ The tool automatically downloads required data, handles large-scale batch proces
 ## Installation
 
 ### With uv (recommended)
+
 ```bash
 git clone https://github.com/your-org/delineator.git
 cd delineator
@@ -25,6 +27,7 @@ uv sync
 ```
 
 ### With pip
+
 ```bash
 git clone https://github.com/your-org/delineator.git
 cd delineator
@@ -66,6 +69,7 @@ delineator run config.toml
 ```
 
 The tool will automatically:
+
 - Determine required MERIT-Hydro basins from outlet coordinates
 - Download missing data
 - Delineate watersheds
@@ -74,6 +78,7 @@ The tool will automatically:
 ## CLI Commands
 
 ### Run watershed delineation
+
 ```bash
 delineator run config.toml
 delineator run config.toml --dry-run              # Validate config without processing
@@ -83,6 +88,7 @@ delineator run config.toml --no-download          # Fail if data is missing (no 
 ```
 
 ### Download MERIT-Hydro data
+
 ```bash
 # Download by bounding box (min_lon,min_lat,max_lon,max_lat)
 delineator download --bbox -125,45,-120,50 -o data/
@@ -98,6 +104,7 @@ delineator download --bbox -125,45,-120,50 --dry-run
 ```
 
 ### List available basins
+
 ```bash
 delineator list-basins
 ```
@@ -110,12 +117,35 @@ Displays all 61 Pfafstetter Level 2 basin codes grouped by continent.
 
 ```toml
 [settings]
-output_dir = "./output"      # Required: base output directory
-max_fails = 100              # Optional: stop after N failures (default: unlimited)
+output_dir = "./output"               # Required: base output directory
+data_dir = "~/data/merit-hydro"       # Optional: path to MERIT-Hydro data (see below)
+max_fails = 100                       # Optional: stop after N failures (default: unlimited)
 
 [[regions]]
 name = "region_name"         # Required: used for hive partitioning (region=name/)
 outlets = "outlets.toml"     # Required: path to outlets file
+```
+
+### Data Directory
+
+The tool needs MERIT-Hydro data (rasters and vectors). You can configure where it looks for this data:
+
+**Option 1: Config file** (per-project)
+```toml
+[settings]
+data_dir = "~/data/merit-hydro"
+```
+
+**Option 2: Environment variable** (global default)
+```bash
+export DELINEATOR_DATA_DIR="$HOME/data/merit-hydro"
+```
+
+**Fallback chain:** config file > env var > `{output_dir}/../data`
+
+For a central data directory used across all projects, add the env var to your shell profile (`~/.zshrc`):
+```bash
+export DELINEATOR_DATA_DIR="$HOME/data/merit-hydro"
 ```
 
 ### Outlets File Format
@@ -140,6 +170,7 @@ output/
 ```
 
 Each watershed shapefile includes attributes:
+
 - `gauge_id`: Unique identifier
 - `gauge_name`: Descriptive name (if provided)
 - `area`: Watershed area (km²)
@@ -149,12 +180,14 @@ Each watershed shapefile includes attributes:
 ## Data Sources
 
 The tool uses data from:
+
 - **MERIT-Hydro**: High-resolution flow direction and accumulation rasters (3-arcsecond, ~90m resolution)
 - **MERIT-Basins**: Vector unit catchments and river networks
 
 Data is organized by Pfafstetter Level 2 basins (61 continental-scale basins worldwide). The tool automatically downloads required data on first use.
 
 For manual download or offline use:
+
 - Rasters: [https://mghydro.com/watersheds/rasters](https://mghydro.com/watersheds/rasters)
 - Vectors: [https://www.reachhydro.org/home/params/merit-basins](https://www.reachhydro.org/home/params/merit-basins)
 
@@ -242,11 +275,13 @@ src/delineator/
 ```
 
 ### Running Tests
+
 ```bash
 uv run pytest
 ```
 
 ### Formatting and Linting
+
 ```bash
 uv run ruff format
 uv run ruff check --fix
@@ -263,13 +298,14 @@ MIT License. See LICENSE file for details.
 If you use this tool in research, please cite:
 
 > Heberger, M. (2022). delineator: Fast watershed delineation using MERIT-Hydro (Version 1.0.0) [Software].
-> Zenodo. https://doi.org/10.5281/zenodo.7314287
+> Zenodo. <https://doi.org/10.5281/zenodo.7314287>
 
 ## Acknowledgments
 
 Original author: Matthew Heberger
 
 Built using:
+
 - [MERIT-Hydro](http://hydro.iis.u-tokyo.ac.jp/~yamadai/MERIT_Hydro/) (Yamazaki et al., 2019)
 - [MERIT-Basins](https://www.reachhydro.org/home/params/merit-basins) (Lin et al., 2021)
 - [GeoPandas](https://geopandas.org/), [Shapely](https://shapely.readthedocs.io/), [pysheds](https://github.com/mdbartos/pysheds)

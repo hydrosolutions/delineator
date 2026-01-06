@@ -17,7 +17,7 @@ description: Configuration management using Pydantic schemas for TOML-based conf
 - `RegionConfig` - Configuration for a single region (name + outlets file path)
 - `OutletConfig` - Configuration for a single outlet point with coordinates
 - `OutletFileConfig` - Root model for outlets TOML files
-- `SettingsConfig` - Global settings (output_dir, max_fails)
+- `SettingsConfig` - Global settings (output_dir, data_dir, max_fails)
 
 ### Functions
 
@@ -31,6 +31,7 @@ description: Configuration management using Pydantic schemas for TOML-based conf
 ```toml
 [settings]
 output_dir = "./output"
+data_dir = "~/data/merit-hydro"  # Optional: overrides DELINEATOR_DATA_DIR env var
 max_fails = 100
 
 [[regions]]

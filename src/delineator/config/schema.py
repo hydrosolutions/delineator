@@ -125,6 +125,9 @@ class SettingsConfig(BaseModel):
     """
 
     output_dir: str = Field(default=DEFAULT_OUTPUT_DIR, description="Base directory for all outputs")
+    data_dir: str | None = Field(
+        default=None, description="Directory containing MERIT-Hydro data (overrides DELINEATOR_DATA_DIR env var)"
+    )
     max_fails: int | None = Field(default=DEFAULT_MAX_FAILS, description="Stop after N failures (None = unlimited)")
 
     @field_validator("output_dir")
