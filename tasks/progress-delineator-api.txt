@@ -1,0 +1,93 @@
+# Ralph Progress Log
+Started: Mon Jan 19 13:06:12 CET 2026
+---
+
+## 2026-01-19 - US-001: Add FastAPI dependencies
+- Added fastapi>=0.115.0 and uvicorn[standard]>=0.32.0 to pyproject.toml
+- Delegated to Bash subagent for uv add commands
+- Verified imports work: fastapi 0.128.0, uvicorn 0.40.0
+- Files changed: pyproject.toml, uv.lock
+- Review findings: All acceptance criteria passed on first attempt
+- **Learnings:** None specific - straightforward dependency addition
+---
+
+## 2026-01-19 - US-002: Create API module skeleton
+- Created src/delineator/api/ module with FastAPI application factory
+- Delegated to Sonnet subagent to write the files
+- Files created: __init__.py, main.py, doc.md
+- Review findings: All files correct, linter passes, uvicorn imports successfully
+- **Learnings:** Module follows existing patterns - doc.md with YAML frontmatter, __init__.py exports public API
+---
+
+## 2026-01-19 - US-003: Implement Pydantic request/response models
+- Created src/delineator/api/models.py with 5 Pydantic models
+- Models: DelineateRequest, WatershedProperties, WatershedFeature, DelineateResponse, ErrorResponse
+- Added watershed_to_response() to convert DelineatedWatershed dataclass to API response
+- Delegated to Sonnet subagent
+- Review findings: All criteria passed, validation works correctly
+- **Learnings:** Use Field(ge=-90, le=90) for coordinate validation; shapely.geometry.mapping() converts geometry to GeoJSON dict
+---
+
+## 2026-01-19 - US-004: Implement SQLite result cache
+- Created src/delineator/api/cache.py with WatershedCache class
+- SQLite schema: cache_key, gauge_id, response_json, created_at, lat, lng, area_km2
+- Cache key format: f"{round(lat, 6):.6f},{round(lng, 6):.6f}"
+- Methods: get(), put(), delete_by_gauge_id(), stats()
+- Delegated to Sonnet subagent
+- Review findings: All criteria passed, serialization/deserialization working correctly
+- **Learnings:** Use model_dump_json()/model_validate_json() for Pydantic serialization; INSERT OR REPLACE for upsert
+---
+
+## 2026-01-19 - US-005: Implement exception handling
+- Created src/delineator/api/exceptions.py with APIErrorCode enum and APIException class
+- Registered exception handlers: RequestValidationError→400, DelineationError→404/500, FileNotFoundError→404
+- Updated main.py to call register_exception_handlers()
+- Added N818 to ruff ignore list for exception naming
+- Delegated to Sonnet subagent
+- Review findings: All criteria passed, all 4 handlers properly registered
+- **Learnings:** Use str(Enum) base class for enum values in JSON; check DelineationError message content to determine error type
+---
+
+## 2026-01-19 - US-006: Implement basin data loading with LRU cache
+- Created src/delineator/api/deps.py with basin data loading utilities
+- get_data_dir(): reads MERIT_DATA_DIR env var (default: /data/merit-hydro)
+- _load_basin_cached(): LRU cache maxsize=5 for basin data
+- get_basin_for_point(): uses get_basins_for_bbox to determine basin from coordinates
+- get_basin_cache_info(): exposes cache stats
+- Delegated to Sonnet subagent
+- Review findings: All criteria passed
+- **Learnings:** Use string path in lru_cache (Path not hashable); get_basins_for_bbox handles point queries with min==max
+---
+
+## 2026-01-19 - US-007: Implement POST /delineate endpoint
+- Created src/delineator/api/routes.py with POST /delineate endpoint
+- Cache lookup before delineation, cache storage after
+- CPU-bound delineation runs in thread pool via asyncio.run_in_executor()
+- Updated main.py to include router
+- Delegated to Sonnet subagent
+- Review findings: All criteria passed, endpoint properly registered
+- **Learnings:** Use functools.partial to bind args for run_in_executor; cache.get returns None on miss
+---
+
+## 2026-01-19 - US-008: Implement monitoring endpoints
+- Added GET /health: returns {status, version, data_dir}
+- Added GET /cache/stats: returns {total_requests, cache_hits, cache_misses, hit_rate, cache_size}
+- Added DELETE /cache/{gauge_id}: removes cache entry, returns 204
+- Added RequestStats dataclass to track hit/miss statistics
+- Updated /delineate to track stats
+- Delegated to Sonnet subagent
+- Review findings: All criteria passed
+- **Learnings:** Use status.HTTP_204_NO_CONTENT for proper status code; combine in-memory stats with db stats for complete picture
+---
+
+## 2026-01-19 - US-009: Implement request logging
+- Created src/delineator/api/logging_config.py with setup_logging() and log_request() functions
+- Configured stdout logging by default for CloudWatch capture
+- Added optional file logging via DELINEATOR_LOG_FILE environment variable
+- Updated routes.py to catch exceptions and log errors with full context (gauge_id, lat, lng, duration)
+- Removed placeholder logging from exceptions.py (logging now done in route where context is available)
+- Files changed: logging_config.py (new), routes.py
+- Delegated to Sonnet subagent for initial implementation, reviewed and approved
+- Review findings: All criteria passed, ruff check passes
+- **Learnings:** Exception handlers lack request body context; log errors in route handlers where full request context is available, then re-raise for proper HTTP response generation
+---
