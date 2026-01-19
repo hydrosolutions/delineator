@@ -58,6 +58,7 @@ ignore = [
     "E501", # let formatter handle wrapping
     "N803", # allow X, Y for ML-style params
     "N806", # allow X, Y for local vars
+    "N818", # allow exception names without Error suffix
 ]
 
 [tool.ruff.format]

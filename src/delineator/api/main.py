@@ -7,6 +7,8 @@ while the module-level `app` instance is used for uvicorn.
 
 from fastapi import FastAPI
 
+from delineator.api.exceptions import register_exception_handlers
+
 
 def create_app() -> FastAPI:
     """
@@ -20,6 +22,8 @@ def create_app() -> FastAPI:
         description="Watershed delineation service using MERIT-Hydro data",
         version="0.1.0",
     )
+
+    register_exception_handlers(application)
 
     return application
 
