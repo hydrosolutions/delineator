@@ -6,10 +6,20 @@ request validation and response serialization. All models use Pydantic v2
 for data validation and serialization.
 """
 
+from enum import Enum
+
 from pydantic import BaseModel, Field
 from shapely.geometry import mapping
 
 from delineator.core.delineate import DelineatedWatershed
+
+
+class ExportFormat(str, Enum):
+    """Supported export file formats."""
+
+    geojson = "geojson"
+    shapefile = "shapefile"
+    geopackage = "geopackage"
 
 
 class DelineateRequest(BaseModel):
