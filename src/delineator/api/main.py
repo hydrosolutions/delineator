@@ -8,6 +8,7 @@ while the module-level `app` instance is used for uvicorn.
 from fastapi import FastAPI
 
 from delineator.api.exceptions import register_exception_handlers
+from delineator.api.routes import router
 
 
 def create_app() -> FastAPI:
@@ -24,6 +25,7 @@ def create_app() -> FastAPI:
     )
 
     register_exception_handlers(application)
+    application.include_router(router)
 
     return application
 
