@@ -1,0 +1,336 @@
+"""
+Tests for the delineator API routes.
+
+Covers all endpoints:
+- POST /delineate - Watershed delineation
+- GET /health - Health check
+- GET /cache/stats - Cache statistics
+- DELETE /cache/{gauge_id} - Cache invalidation
+"""
+
+from unittest.mock import patch
+
+from fastapi.testclient import TestClient
+
+from delineator.api import routes
+from delineator.api.cache import WatershedCache
+from delineator.api.main import create_app
+from delineator.core.delineate import DelineationError
+
+
+class TestDelineateEndpoint:
+    """Tests for POST /delineate endpoint."""
+
+    def test_delineate_success(self, test_client: TestClient) -> None:
+        """Valid request returns watershed GeoJSON with success status."""
+        response = test_client.post(
+            "/delineate",
+            json={"gauge_id": "test-gauge-001", "lat": 40.0, "lng": -105.0},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["status"] == "success"
+        assert data["gauge_id"] == "test-gauge-001"
+        assert data["cached"] is False
+        assert data["watershed"]["type"] == "Feature"
+        assert data["watershed"]["geometry"]["type"] == "Polygon"
+        assert data["watershed"]["properties"]["area_km2"] == 250.5
+        assert data["watershed"]["properties"]["snap_lat"] == 40.001
+        assert data["watershed"]["properties"]["snap_lng"] == -104.999
+        assert data["watershed"]["properties"]["snap_distance_m"] == 150.5
+        assert data["watershed"]["properties"]["resolution"] == "high_res"
+
+    def test_delineate_cache_miss_then_hit(self, test_client: TestClient) -> None:
+        """First request is cache miss, second request is cache hit."""
+        # First request - cache miss
+        response1 = test_client.post(
+            "/delineate",
+            json={"gauge_id": "cache-test", "lat": 40.0, "lng": -105.0},
+        )
+        assert response1.status_code == 200
+        assert response1.json()["cached"] is False
+
+        # Second request - cache hit (same coordinates)
+        response2 = test_client.post(
+            "/delineate",
+            json={"gauge_id": "cache-test-2", "lat": 40.0, "lng": -105.0},
+        )
+        assert response2.status_code == 200
+        assert response2.json()["cached"] is True
+        # gauge_id should be updated to the new request's gauge_id
+        assert response2.json()["gauge_id"] == "cache-test-2"
+
+    def test_delineate_updates_cache_stats(self, test_client: TestClient) -> None:
+        """Cache stats are updated correctly after requests."""
+        # Initial stats
+        stats_response = test_client.get("/cache/stats")
+        initial_stats = stats_response.json()
+        assert initial_stats["total_requests"] == 0
+        assert initial_stats["cache_hits"] == 0
+        assert initial_stats["cache_misses"] == 0
+
+        # First request - miss
+        test_client.post(
+            "/delineate",
+            json={"gauge_id": "stats-test", "lat": 40.0, "lng": -105.0},
+        )
+
+        stats_response = test_client.get("/cache/stats")
+        stats = stats_response.json()
+        assert stats["total_requests"] == 1
+        assert stats["cache_hits"] == 0
+        assert stats["cache_misses"] == 1
+
+        # Second request - hit
+        test_client.post(
+            "/delineate",
+            json={"gauge_id": "stats-test-2", "lat": 40.0, "lng": -105.0},
+        )
+
+        stats_response = test_client.get("/cache/stats")
+        stats = stats_response.json()
+        assert stats["total_requests"] == 2
+        assert stats["cache_hits"] == 1
+        assert stats["cache_misses"] == 1
+        assert stats["hit_rate"] == 0.5
+
+    def test_delineate_invalid_lat_type(self, test_client: TestClient) -> None:
+        """Non-numeric latitude returns INVALID_COORDINATES error."""
+        response = test_client.post(
+            "/delineate",
+            json={"gauge_id": "test", "lat": "not-a-number", "lng": -105.0},
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert data["status"] == "error"
+        assert data["error_code"] == "INVALID_COORDINATES"
+        assert "lat" in data["error_message"]
+
+    def test_delineate_missing_fields(self, test_client: TestClient) -> None:
+        """Missing required fields returns INVALID_COORDINATES error."""
+        response = test_client.post(
+            "/delineate",
+            json={"gauge_id": "test"},  # Missing lat and lng
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert data["status"] == "error"
+        assert data["error_code"] == "INVALID_COORDINATES"
+        # Should mention missing fields
+        assert "lat" in data["error_message"] or "lng" in data["error_message"]
+
+    def test_delineate_lat_out_of_range(self, test_client: TestClient) -> None:
+        """Latitude > 90 is rejected with INVALID_COORDINATES."""
+        response = test_client.post(
+            "/delineate",
+            json={"gauge_id": "test", "lat": 95.0, "lng": -105.0},
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert data["status"] == "error"
+        assert data["error_code"] == "INVALID_COORDINATES"
+        assert "lat" in data["error_message"]
+
+    def test_delineate_lng_out_of_range(self, test_client: TestClient) -> None:
+        """Longitude > 180 is rejected with INVALID_COORDINATES."""
+        response = test_client.post(
+            "/delineate",
+            json={"gauge_id": "test", "lat": 40.0, "lng": 200.0},
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert data["status"] == "error"
+        assert data["error_code"] == "INVALID_COORDINATES"
+        assert "lng" in data["error_message"]
+
+    def test_delineate_no_river_found(
+        self,
+        mock_basin_data,
+        tmp_path,
+    ) -> None:
+        """DelineationError with 'unit catchment' message returns NO_RIVER_FOUND."""
+        with (
+            patch(
+                "delineator.api.routes.get_basin_for_point",
+                return_value=mock_basin_data,
+            ),
+            patch(
+                "delineator.api.routes.get_data_dir",
+                return_value=tmp_path,
+            ),
+            patch(
+                "delineator.api.routes.delineate_outlet",
+                side_effect=DelineationError("Point (40.0, -105.0) does not fall within any unit catchment"),
+            ),
+        ):
+            routes.cache = WatershedCache(tmp_path / "cache.db")
+            routes.stats = routes.RequestStats()
+
+            app = create_app()
+            client = TestClient(app)
+
+            response = client.post(
+                "/delineate",
+                json={"gauge_id": "test", "lat": 40.0, "lng": -105.0},
+            )
+
+            assert response.status_code == 404
+            data = response.json()
+            assert data["status"] == "error"
+            assert data["error_code"] == "NO_RIVER_FOUND"
+            assert "unit catchment" in data["error_message"]
+
+    def test_delineate_no_data_available(
+        self,
+        mock_basin_data,
+        tmp_path,
+    ) -> None:
+        """FileNotFoundError returns NO_DATA_AVAILABLE."""
+        with (
+            patch(
+                "delineator.api.routes.get_basin_for_point",
+                return_value=mock_basin_data,
+            ),
+            patch(
+                "delineator.api.routes.get_data_dir",
+                return_value=tmp_path,
+            ),
+            patch(
+                "delineator.api.routes.delineate_outlet",
+                side_effect=FileNotFoundError("Flow direction raster not found"),
+            ),
+        ):
+            routes.cache = WatershedCache(tmp_path / "cache.db")
+            routes.stats = routes.RequestStats()
+
+            app = create_app()
+            client = TestClient(app)
+
+            response = client.post(
+                "/delineate",
+                json={"gauge_id": "test", "lat": 40.0, "lng": -105.0},
+            )
+
+            assert response.status_code == 404
+            data = response.json()
+            assert data["status"] == "error"
+            assert data["error_code"] == "NO_DATA_AVAILABLE"
+
+    def test_delineate_generic_error(
+        self,
+        mock_basin_data,
+        tmp_path,
+    ) -> None:
+        """Other DelineationError returns DELINEATION_FAILED."""
+        with (
+            patch(
+                "delineator.api.routes.get_basin_for_point",
+                return_value=mock_basin_data,
+            ),
+            patch(
+                "delineator.api.routes.get_data_dir",
+                return_value=tmp_path,
+            ),
+            patch(
+                "delineator.api.routes.delineate_outlet",
+                side_effect=DelineationError("Unexpected error during delineation"),
+            ),
+        ):
+            routes.cache = WatershedCache(tmp_path / "cache.db")
+            routes.stats = routes.RequestStats()
+
+            app = create_app()
+            client = TestClient(app)
+
+            response = client.post(
+                "/delineate",
+                json={"gauge_id": "test", "lat": 40.0, "lng": -105.0},
+            )
+
+            assert response.status_code == 500
+            data = response.json()
+            assert data["status"] == "error"
+            assert data["error_code"] == "DELINEATION_FAILED"
+
+
+class TestHealthEndpoint:
+    """Tests for GET /health endpoint."""
+
+    def test_health_returns_status(self, test_client: TestClient) -> None:
+        """Health endpoint returns healthy status and version."""
+        response = test_client.get("/health")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["status"] == "healthy"
+        assert data["version"] == "0.1.0"
+        assert "data_dir" in data
+
+
+class TestCacheStatsEndpoint:
+    """Tests for GET /cache/stats endpoint."""
+
+    def test_cache_stats_initial(self, test_client: TestClient) -> None:
+        """Initial cache stats are all zeros."""
+        response = test_client.get("/cache/stats")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["total_requests"] == 0
+        assert data["cache_hits"] == 0
+        assert data["cache_misses"] == 0
+        assert data["hit_rate"] == 0.0
+        assert data["cache_size"] == 0
+
+    def test_cache_stats_after_requests(self, test_client: TestClient) -> None:
+        """Cache stats update correctly after delineation requests."""
+        # Make a request
+        test_client.post(
+            "/delineate",
+            json={"gauge_id": "test", "lat": 40.0, "lng": -105.0},
+        )
+
+        response = test_client.get("/cache/stats")
+        data = response.json()
+
+        assert data["total_requests"] == 1
+        assert data["cache_misses"] == 1
+        assert data["cache_size"] == 1
+
+
+class TestDeleteCacheEndpoint:
+    """Tests for DELETE /cache/{gauge_id} endpoint."""
+
+    def test_delete_cache_returns_204(self, test_client: TestClient) -> None:
+        """Delete endpoint returns 204 No Content."""
+        # First create a cache entry
+        test_client.post(
+            "/delineate",
+            json={"gauge_id": "delete-test", "lat": 40.0, "lng": -105.0},
+        )
+
+        # Verify it's in cache
+        stats = test_client.get("/cache/stats").json()
+        assert stats["cache_size"] == 1
+
+        # Delete it
+        response = test_client.delete("/cache/delete-test")
+        assert response.status_code == 204
+
+        # Verify it's gone
+        stats = test_client.get("/cache/stats").json()
+        assert stats["cache_size"] == 0
+
+    def test_delete_cache_idempotent(self, test_client: TestClient) -> None:
+        """Deleting non-existent cache entry returns 204 (idempotent)."""
+        response = test_client.delete("/cache/non-existent-gauge")
+
+        assert response.status_code == 204
