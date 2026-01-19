@@ -96,6 +96,30 @@ class WatershedCache:
         response_json = row[0]
         return DelineateResponse.model_validate_json(response_json)
 
+    def get_by_gauge_id(self, gauge_id: str) -> DelineateResponse | None:
+        """
+        Retrieve a cached watershed delineation result by gauge ID.
+
+        Args:
+            gauge_id: Unique identifier for the gauge
+
+        Returns:
+            DelineateResponse if found in cache, None otherwise.
+            If multiple entries exist for the same gauge_id, returns the first match.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                "SELECT response_json FROM watershed_cache WHERE gauge_id = ? LIMIT 1",
+                (gauge_id,),
+            )
+            row = cursor.fetchone()
+
+        if row is None:
+            return None
+
+        response_json = row[0]
+        return DelineateResponse.model_validate_json(response_json)
+
     def put(self, lat: float, lng: float, gauge_id: str, response: DelineateResponse) -> None:
         """
         Store a watershed delineation result in the cache.
