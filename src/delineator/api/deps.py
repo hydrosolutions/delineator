@@ -59,18 +59,19 @@ def get_basin_for_point(lat: float, lng: float) -> BasinData:
         FileNotFoundError: If basin data files are missing
     """
     from delineator.download import get_basins_for_bbox
+    from delineator.download.basin_selector import _get_basins_shapefile_path
+
+    data_dir = get_data_dir()
+    basins_shapefile = _get_basins_shapefile_path(data_dir)
 
     # Get basins that intersect the point (usually just one)
-    basins = get_basins_for_bbox(lng, lat, lng, lat)
+    basins = get_basins_for_bbox(lng, lat, lng, lat, basins_shapefile=basins_shapefile)
 
     if not basins:
-        raise ValueError(
-            f"Point ({lat}, {lng}) does not fall within any known basin"
-        )
+        raise ValueError(f"Point ({lat}, {lng}) does not fall within any known basin")
 
     # Use first basin (should be the only one for a point)
     basin_code = basins[0]
-    data_dir = get_data_dir()
 
     return _load_basin_cached(basin_code, str(data_dir))
 
