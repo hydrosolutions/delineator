@@ -11,10 +11,13 @@ from fastapi import APIRouter, Response, status
 
 from delineator.api.cache import WatershedCache
 from delineator.api.deps import get_basin_for_point, get_data_dir
+from delineator.api.exceptions import APIErrorCode, APIException
+from delineator.api.export import export_watershed
 from delineator.api.logging_config import log_request, setup_logging
 from delineator.api.models import (
     DelineateRequest,
     DelineateResponse,
+    ExportFormat,
     watershed_to_response,
 )
 from delineator.core.delineate import DelineationError, delineate_outlet
@@ -207,3 +210,41 @@ async def delete_cache(gauge_id: str) -> Response:
     """
     cache.delete_by_gauge_id(gauge_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/export/{gauge_id}")
+async def export_by_gauge_id(gauge_id: str, format: ExportFormat = ExportFormat.geojson) -> Response:
+    """
+    Export a cached watershed as a downloadable file.
+
+    Args:
+        gauge_id: The gauge identifier to export
+        format: Export file format (geojson, shapefile, or geopackage)
+
+    Returns:
+        File download response with appropriate Content-Type and Content-Disposition headers.
+
+    Raises:
+        404: If gauge_id is not found in cache
+        422: If format is not a valid ExportFormat value
+    """
+    # Retrieve cached response
+    response = cache.get_by_gauge_id(gauge_id)
+
+    if response is None:
+        raise APIException(
+            APIErrorCode.WATERSHED_NOT_FOUND,
+            f"Watershed not found for gauge_id: {gauge_id}",
+            http_status=404,
+            gauge_id=gauge_id,
+        )
+
+    # Export to requested format
+    data, content_type, filename = export_watershed(response, gauge_id, format)
+
+    # Return file download response
+    return Response(
+        content=data,
+        media_type=content_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
