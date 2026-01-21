@@ -30,6 +30,7 @@ class DelineateRequest(BaseModel):
     gauge_id: str
     lat: float = Field(ge=-90, le=90, description="Latitude in decimal degrees")
     lng: float = Field(ge=-180, le=180, description="Longitude in decimal degrees")
+    force_low_res: bool = Field(default=False, description="Force low-resolution delineation for faster results")
 
 
 class WatershedProperties(BaseModel):

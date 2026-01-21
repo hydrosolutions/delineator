@@ -57,31 +57,34 @@ class WatershedCache:
             """)
             conn.commit()
 
-    def _make_cache_key(self, lat: float, lng: float) -> str:
+    def _make_cache_key(self, lat: float, lng: float, force_low_res: bool = False) -> str:
         """
-        Generate a cache key from coordinates.
+        Generate a cache key from coordinates and resolution.
 
         Args:
             lat: Latitude in decimal degrees
             lng: Longitude in decimal degrees
+            force_low_res: Whether low resolution was requested
 
         Returns:
-            Cache key string in format "lat,lng" with 6 decimal places
+            Cache key string in format "lat,lng,resolution" with 6 decimal places
         """
-        return f"{round(lat, 6):.6f},{round(lng, 6):.6f}"
+        resolution = "low" if force_low_res else "high"
+        return f"{round(lat, 6):.6f},{round(lng, 6):.6f},{resolution}"
 
-    def get(self, lat: float, lng: float) -> DelineateResponse | None:
+    def get(self, lat: float, lng: float, force_low_res: bool = False) -> DelineateResponse | None:
         """
         Retrieve a cached watershed delineation result.
 
         Args:
             lat: Latitude in decimal degrees
             lng: Longitude in decimal degrees
+            force_low_res: Whether low resolution was requested
 
         Returns:
             DelineateResponse if found in cache, None otherwise
         """
-        cache_key = self._make_cache_key(lat, lng)
+        cache_key = self._make_cache_key(lat, lng, force_low_res)
 
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute(
@@ -120,7 +123,9 @@ class WatershedCache:
         response_json = row[0]
         return DelineateResponse.model_validate_json(response_json)
 
-    def put(self, lat: float, lng: float, gauge_id: str, response: DelineateResponse) -> None:
+    def put(
+        self, lat: float, lng: float, gauge_id: str, response: DelineateResponse, force_low_res: bool = False
+    ) -> None:
         """
         Store a watershed delineation result in the cache.
 
@@ -129,8 +134,10 @@ class WatershedCache:
             lng: Longitude in decimal degrees
             gauge_id: Unique identifier for the gauge
             response: DelineateResponse to cache
+            force_low_res: Whether low resolution was requested
+
         """
-        cache_key = self._make_cache_key(lat, lng)
+        cache_key = self._make_cache_key(lat, lng, force_low_res)
         response_json = response.model_dump_json()
         created_at = datetime.now(UTC).isoformat()
         area_km2 = response.watershed.properties.area_km2
