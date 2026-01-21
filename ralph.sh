@@ -126,7 +126,12 @@ $(cat "$SCRIPT_DIR/prompt.md")"
     exit 2
   fi
 
-  echo "Iteration $i complete. Continuing..."
+  # Check for story completion signal
+  if echo "$OUTPUT" | grep -q "<promise>STORY_COMPLETE</promise>"; then
+    echo "  ✓ Story completed. Starting next iteration..."
+  else
+    echo "  Iteration $i ended without completion signal."
+  fi
   sleep 2
 done
 

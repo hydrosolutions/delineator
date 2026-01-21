@@ -251,6 +251,7 @@ After completing a user story (committed, PRD updated, progress logged):
 ### Why One Story Per Session?
 
 Each Claude Code session has limited context. By stopping after each story:
+
 - Fresh context for each story prevents confusion
 - Progress is saved to disk (PRD + progress file) between sessions
 - Failures are isolated to a single story

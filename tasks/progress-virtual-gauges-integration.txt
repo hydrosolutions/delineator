@@ -1,0 +1,195 @@
+# Ralph Progress Log
+Started: Wed Jan 21 13:06:21 CET 2026
+---
+
+## Codebase Patterns
+- `os.getenv()` pattern: `os.getenv("ENV_VAR_NAME", "default_value")` used in deps.py and cache.py
+- FastAPI middleware should be added in `create_app()` BEFORE `register_exception_handlers()` and `include_router()`
+- No pyright configured in this project - only ruff for linting
+
+---
+
+## 2026-01-21 - US-001: Add CORS middleware to API
+- **What was implemented:**
+  - Added `CORSMiddleware` to FastAPI app in `src/delineator/api/main.py`
+  - Created `_get_cors_origins()` helper function to read from `DELINEATOR_CORS_ORIGINS` env var
+  - Default origins: `http://localhost:3000`, `http://127.0.0.1:3000`
+  - Allowed methods: GET, POST, DELETE; Allowed headers: `*`
+
+- **Subtasks delegated:**
+  - Sonnet agent: Implementation of CORS middleware (completed successfully)
+  - Haiku agent: Exploration of main.py structure and os.getenv patterns
+
+- **Files changed:**
+  - `src/delineator/api/main.py` (+26 lines)
+
+- **Review findings:**
+  - All acceptance criteria met
+  - Lint passes (ruff check)
+  - All 41 existing API tests still pass
+  - Pyright not available in project (not in dev dependencies)
+
+- **Learnings for future iterations:**
+  - FastAPI middleware pattern: `application.add_middleware(MiddlewareClass, **kwargs)`
+  - CORS helper follows same env var pattern as other configs in codebase
+---
+
+## 2026-01-21 - US-002: Add CORS unit tests
+- **What was implemented:**
+  - Created `tests/api/test_cors.py` with 5 comprehensive CORS tests
+  - `TestCORSMiddleware` class: preflight requests, allowed origins, unauthorized origins
+  - `TestGetCorsOrigins` class: default values test, env var parsing test
+
+- **Subtasks delegated:**
+  - Sonnet agent: Implementation of CORS tests (completed successfully)
+
+- **Files changed:**
+  - `tests/api/test_cors.py` (+86 lines, new file)
+
+- **Review findings:**
+  - All 5 acceptance criteria tests pass
+  - Follows existing test patterns from test_routes.py (classes, type hints, docstrings)
+  - Lint passes (ruff check)
+  - All 46 API tests pass
+
+- **Learnings for future iterations:**
+  - CORS middleware reads origins at app creation time - must create app AFTER setting up env patches
+  - Use `patch.dict(os.environ, ...)` for env var mocking (requires `import os`)
+---
+
+## 2026-01-21 - US-003: Add geometry simplification function
+- **What was implemented:**
+  - Added `DEFAULT_SIMPLIFY_TOLERANCE = 0.001` constant (~100m at equator)
+  - Added `simplify_geometry()` function using Shapely's `simplify()` with `preserve_topology=True`
+  - Function handles both `Polygon` and `MultiPolygon` types
+  - Full type hints and docstring
+
+- **Subtasks delegated:**
+  - Haiku agent: Exploration of models.py structure and shapely imports
+  - Sonnet agent: Implementation of simplify_geometry function (completed successfully)
+
+- **Files changed:**
+  - `src/delineator/api/models.py` (+11 lines)
+
+- **Review findings:**
+  - All acceptance criteria met
+  - Lint passes (ruff check)
+  - All 46 API tests still pass
+  - Function placed before `watershed_to_response()` for logical grouping
+
+- **Learnings for future iterations:**
+  - Shapely types imported from `shapely.geometry` (Polygon, MultiPolygon)
+  - `geometry.simplify()` method returns the same type as input
+  - US-004 will integrate this function into `watershed_to_response()`
+---
+
+## 2026-01-21 - US-004: Integrate simplification into API response
+- **What was implemented:**
+  - Modified `watershed_to_response()` in `models.py` to call `simplify_geometry()` before `mapping()`
+  - Geometry is now simplified before being converted to GeoJSON dict
+
+- **Subtasks delegated:**
+  - Sonnet agent: Implementation of the integration (completed successfully)
+
+- **Files changed:**
+  - `src/delineator/api/models.py` (+2 lines, -1 line)
+
+- **Review findings:**
+  - All acceptance criteria met
+  - Minimal, focused change (2 lines)
+  - Lint passes (ruff check)
+  - All 46 API tests still pass (mock fixtures use simple geometries so simplification doesn't affect them)
+
+- **Learnings for future iterations:**
+  - Simplification happens in API layer (models.py) not core layer - this keeps concerns separated
+  - Existing tests pass because mock fixtures already use simple geometries
+---
+
+## 2026-01-21 - US-005: Add simplification unit tests
+- **What was implemented:**
+  - Created `tests/api/test_models.py` with `TestSimplifyGeometry` class
+  - Test: Complex polygon (256+ vertices) is reduced to fewer vertices
+  - Test: Simplified geometry remains valid (`is_valid` check)
+  - Test: MultiPolygon geometries are handled correctly
+  - Added `mock_complex_watershed` fixture to `tests/api/conftest.py`
+
+- **Subtasks delegated:**
+  - Haiku agent: Exploration of test patterns and conftest.py structure
+  - Sonnet agent (parallel): Add mock_complex_watershed fixture (completed successfully)
+  - Sonnet agent (parallel): Create test_models.py with tests (completed successfully)
+
+- **Files changed:**
+  - `tests/api/test_models.py` (+64 lines, new file)
+  - `tests/api/conftest.py` (+26 lines)
+
+- **Review findings:**
+  - All 5 acceptance criteria met
+  - All 3 new tests pass
+  - All 49 API tests pass (no regressions)
+  - Lint passes (ruff check)
+  - Tests use Point.buffer() pattern to create high-vertex polygons
+
+- **Learnings for future iterations:**
+  - Use `Point.buffer(radius, resolution=64)` to create 256+ vertex test polygons
+  - Shapely's `resolution` parameter is deprecated, use `quad_segs` in future (warning only)
+  - Mock fixtures with complex geometry useful for testing simplification behavior
+---
+
+## 2026-01-21 - US-006: Add force_low_res parameter
+- **What was implemented:**
+  - Added `force_low_res: bool = Field(default=False, ...)` to `DelineateRequest` in models.py
+  - Updated `_make_cache_key()` in cache.py to include resolution suffix (`{lat},{lng},{high|low}`)
+  - Updated `cache.get()` and `cache.put()` methods to accept `force_low_res` parameter
+  - Wired through `use_high_res=not request.force_low_res` to `delineate_outlet()` in routes.py
+
+- **Subtasks delegated:**
+  - Sonnet agent (parallel): Add force_low_res field to DelineateRequest (completed)
+  - Sonnet agent (parallel): Update cache.py for resolution-based cache keys (completed)
+  - Sonnet agent (sequential): Update routes.py to wire through parameters (completed)
+
+- **Files changed:**
+  - `src/delineator/api/models.py` (+1 line)
+  - `src/delineator/api/cache.py` (+19 lines, -10 lines)
+  - `src/delineator/api/routes.py` (+3 lines, -2 lines)
+
+- **Review findings:**
+  - All acceptance criteria met
+  - All 49 API tests pass (no regressions)
+  - Lint passes (ruff check)
+  - Backward compatible: default `force_low_res=False` preserves existing high-res behavior
+  - Cache keys properly differentiate between resolutions
+
+- **Learnings for future iterations:**
+  - The core `delineate_outlet()` already has `use_high_res` parameter - just needs wiring
+  - Cache key format change is backward compatible (old entries simply won't match)
+  - Pydantic `Field(default=...)` provides OpenAPI documentation automatically
+---
+
+## 2026-01-21 - US-007: Add force_low_res tests
+- **What was implemented:**
+  - Created `mock_watershed_low_res` fixture in `tests/api/conftest.py` with `resolution="low_res"`
+  - Added `TestForceLowRes` class in `tests/api/test_routes.py` with 4 comprehensive tests:
+    - `test_delineate_without_force_low_res_defaults_to_false` - verifies default high-res behavior
+    - `test_delineate_with_force_low_res_true_is_accepted` - verifies low-res requests work
+    - `test_delineate_cache_isolation_by_resolution` - verifies different cache entries per resolution
+    - `test_delineate_invalid_force_low_res_type_rejected` - verifies 400 error for invalid types
+
+- **Subtasks delegated:**
+  - Sonnet agent (parallel): Create mock_watershed_low_res fixture (completed successfully)
+  - Sonnet agent (parallel): Create TestForceLowRes tests (completed successfully)
+
+- **Files changed:**
+  - `tests/api/conftest.py` (+26 lines)
+  - `tests/api/test_routes.py` (+87 lines)
+
+- **Review findings:**
+  - All 5 acceptance criteria met
+  - All 4 new tests pass
+  - All 53 API tests pass (no regressions)
+  - Lint passes (ruff check)
+
+- **Learnings for future iterations:**
+  - Pydantic coerces strings like "yes"/"no"/"true"/"false" to booleans, but rejects objects/lists
+  - Custom mocking pattern needed when testing low-res responses (mock delineate_outlet return value)
+  - Cache isolation can be tested by verifying cache miss → cache miss → cache hit pattern
+---

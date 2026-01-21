@@ -29,7 +29,7 @@ Ask only critical questions where the initial prompt is ambiguous. Focus on:
 - **Scope/Boundaries:** What should it NOT do?
 - **Success Criteria:** How do we know it's done?
 
-### Format Questions Like This:
+### Format Questions Like This
 
 ```
 1. What is the primary goal of this feature?
@@ -77,19 +77,24 @@ stories:
 ```
 
 **Important:**
+
 - The `stories` block must list ALL user story IDs in order
 - All stories start with `passes: false`
 - Ralph updates `passes: true` when completing each story
 - This frontmatter is the **single source of truth** for progress tracking
 
 ### 1. Introduction/Overview
+
 Brief description of the feature and the problem it solves. Include any rich technical context from discussions - function signatures, package structure diagrams, design decisions, physics explanations, etc. This context is preserved and available to Ralph during implementation.
 
 ### 2. Goals
+
 Specific, measurable objectives (bullet list).
 
 ### 3. User Stories
+
 Each story needs:
+
 - **Title:** Short descriptive name
 - **Priority:** Number (1 = highest, implement first)
 - **Description:** "As a [user], I want [feature] so that [benefit]"
@@ -99,6 +104,7 @@ Each story needs:
 Each story should be small enough to implement in one focused session (one Ralph iteration).
 
 **Format:**
+
 ```markdown
 ### US-001: [Title]
 **Priority:** 1
@@ -116,36 +122,45 @@ Each story should be small enough to implement in one focused session (one Ralph
 ```
 
 **Important:**
+
 - Acceptance criteria must be verifiable, not vague. "Works correctly" is bad. "Button shows confirmation dialog before deleting" is good.
 - **For any story with UI changes:** Always include "Verify in browser using dev-browser skill" as acceptance criteria. This ensures visual verification of frontend work.
 - Stories should be ordered by dependency (schema → backend → UI)
 
 ### 4. Functional Requirements
+
 Numbered list of specific functionalities:
+
 - "FR-1: The system must allow users to..."
 - "FR-2: When a user clicks X, the system must..."
 
 Be explicit and unambiguous.
 
 ### 5. Non-Goals (Out of Scope)
+
 What this feature will NOT include. Critical for managing scope.
 
 ### 6. Design Considerations (Optional)
+
 - UI/UX requirements
 - Link to mockups if available
 - Relevant existing components to reuse
 
 ### 7. Technical Considerations (Optional)
+
 - Known constraints or dependencies
 - Integration points with existing systems
 - Performance requirements
 
 ### 8. Success Metrics
+
 How will success be measured?
+
 - "Reduce time to complete X by 50%"
 - "Increase conversion rate by 10%"
 
 ### 9. Open Questions
+
 Remaining questions or areas needing clarification.
 
 ---

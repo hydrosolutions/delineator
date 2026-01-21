@@ -1,0 +1,116 @@
+# Ralph Progress Log
+Started: Mon Jan 19 15:51:12 CET 2026
+---
+
+## Codebase Patterns
+- API enums use `class EnumName(str, Enum)` pattern for Pydantic compatibility
+- Error codes are uppercase snake_case with matching string values
+- Pyright not installed; use `uv run python -c "import ..."` for import validation
+- Run `uv run ruff check` for linting, `uv run pytest tests/api/` for tests
+---
+
+## 2026-01-19 - US-001: Add ExportFormat enum and WATERSHED_NOT_FOUND error code
+- **What was implemented:**
+  - Added `ExportFormat` enum to `src/delineator/api/models.py` with values: geojson, shapefile, geopackage
+  - Added `WATERSHED_NOT_FOUND` to `APIErrorCode` enum in `src/delineator/api/exceptions.py`
+- **Subtasks delegated:**
+  - Sonnet agent: Add ExportFormat enum (completed successfully)
+  - Sonnet agent: Add WATERSHED_NOT_FOUND error code (completed successfully)
+- **Files changed:**
+  - `src/delineator/api/models.py` - Added Enum import and ExportFormat class
+  - `src/delineator/api/exceptions.py` - Added WATERSHED_NOT_FOUND value
+- **Review findings:**
+  - All changes matched requirements
+  - Ruff lint passed
+  - 15 existing API tests passed (no regressions)
+  - Both new enums import correctly
+- **Learnings:**
+  - Pyright mentioned in PRD but not in dev dependencies; validation done via Python imports
+---
+
+## 2026-01-19 - US-002: Add get_by_gauge_id method to cache
+- **What was implemented:**
+  - Added `get_by_gauge_id(gauge_id: str) -> DelineateResponse | None` method to `WatershedCache` class
+  - Created unit tests for the new method in `tests/api/test_cache.py`
+- **Subtasks delegated:**
+  - Sonnet agent: Implement get_by_gauge_id method (completed successfully, in parallel)
+  - Sonnet agent: Write unit tests for get_by_gauge_id (completed successfully, in parallel)
+- **Files changed:**
+  - `src/delineator/api/cache.py` - Added get_by_gauge_id method with LIMIT 1 query
+  - `tests/api/test_cache.py` - New file with 2 unit tests
+- **Review findings:**
+  - Method follows existing patterns (query + model_validate_json deserialization)
+  - Ruff lint passed for both files
+  - All 17 API tests passed (15 existing + 2 new)
+  - Tests verify both positive case (returns response) and negative case (returns None)
+- **Learnings:**
+  - Test fixtures in `conftest.py` (fresh_cache, mock_delineate_response) are reusable for new cache tests
+  - WatershedCache uses gauge_id as an indexed column (not unique) so LIMIT 1 is appropriate
+---
+
+## 2026-01-19 - US-003: Create export service module
+- **What was implemented:**
+  - Created `src/delineator/api/export.py` with complete export functionality
+  - Functions: response_to_geodataframe, export_geojson, export_shapefile_zip, export_geopackage, export_watershed
+  - Created comprehensive unit tests in `tests/api/test_export_service.py` (12 tests)
+- **Subtasks delegated:**
+  - Sonnet agent: Implement all export functions (completed successfully)
+  - Sonnet agent: Create unit tests for export module (completed successfully)
+- **Files changed:**
+  - `src/delineator/api/export.py` - New file with 168 lines
+  - `tests/api/test_export_service.py` - New file with 252 lines, 12 tests
+- **Review findings:**
+  - All functions match acceptance criteria
+  - Ruff lint passed for both files
+  - All 29 API tests passed (17 previous + 12 new)
+  - Shapefile column truncation handled correctly (snap_distance_m → snap_dist_)
+  - Temporary files properly cleaned up in all export functions
+- **Learnings:**
+  - Shapefile column names limited to 10 chars - geopandas/pyogrio truncates further than expected (snap_dist_m → snap_dist_)
+  - Use tempfile.TemporaryDirectory for shapefile (multiple files), NamedTemporaryFile for single file exports
+  - mock_delineate_response fixture from conftest.py is reusable for export tests
+---
+
+## 2026-01-19 - US-004: Add export endpoint to routes
+- **What was implemented:**
+  - Added GET /export/{gauge_id} endpoint to `src/delineator/api/routes.py`
+  - Accepts optional `format` query param (default: geojson)
+  - Returns files with correct Content-Type and Content-Disposition headers
+  - Returns 404 with WATERSHED_NOT_FOUND for missing gauge_id
+  - FastAPI handles 422 for invalid format values automatically
+- **Subtasks delegated:**
+  - Sonnet agent: Implement export endpoint (completed successfully first try)
+- **Files changed:**
+  - `src/delineator/api/routes.py` - Added export_by_gauge_id endpoint function
+- **Review findings:**
+  - All 29 existing API tests passed (no regressions)
+  - Ruff lint passed
+  - Code follows existing patterns for error handling
+  - Implementation is minimal and focused
+- **Learnings:**
+  - APIException with http_status parameter is used for custom HTTP status codes
+  - Response object accepts media_type and headers params directly
+  - FastAPI enum query params automatically return 422 for invalid values
+---
+
+## 2026-01-19 - US-005: Integration tests for export endpoint
+- **What was implemented:**
+  - Created `tests/api/test_export.py` with 12 comprehensive integration tests
+  - Tests cover all three formats (GeoJSON, Shapefile, GeoPackage)
+  - Tests verify error handling (404 for missing gauge, 400 for invalid format)
+  - Tests verify all properties are preserved in exported files
+- **Subtasks delegated:**
+  - Sonnet agent: Write integration tests (completed successfully)
+- **Files changed:**
+  - `tests/api/test_export.py` - New file with 353 lines, 12 tests
+- **Review findings:**
+  - All 41 API tests pass (29 previous + 12 new integration tests)
+  - Ruff lint passed
+  - Tests follow existing patterns from test_routes.py
+  - PRD said 422 for invalid format, but API returns 400 via custom exception handler - tests reflect actual behavior
+- **Learnings:**
+  - Custom exception handler converts FastAPI's RequestValidationError to 400 (not 422)
+  - Use `routes.cache.put()` to directly populate cache for integration tests
+  - `zipfile` module works well for validating Shapefile ZIP contents
+  - GeoPackage files can be validated by checking SQLite magic bytes (b'SQLite format 3')
+---
