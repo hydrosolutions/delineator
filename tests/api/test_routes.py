@@ -334,3 +334,90 @@ class TestDeleteCacheEndpoint:
         response = test_client.delete("/cache/non-existent-gauge")
 
         assert response.status_code == 204
+
+
+class TestForceLowRes:
+    """Tests for force_low_res parameter in /delineate endpoint."""
+
+    def test_delineate_without_force_low_res_defaults_to_false(self, test_client: TestClient) -> None:
+        """POST request without force_low_res field defaults to high-res behavior."""
+        response = test_client.post(
+            "/delineate",
+            json={"gauge_id": "test-gauge", "lat": 40.0, "lng": -105.0},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        # Check default behavior is high-res
+        assert data["watershed"]["properties"]["resolution"] == "high_res"
+
+    def test_delineate_with_force_low_res_true_is_accepted(
+        self,
+        mock_basin_data,
+        mock_watershed_low_res,
+        tmp_path,
+    ) -> None:
+        """POST request with force_low_res=true is accepted and returns low-res result."""
+        with (
+            patch("delineator.api.routes.get_basin_for_point", return_value=mock_basin_data),
+            patch("delineator.api.routes.get_data_dir", return_value=tmp_path),
+            patch("delineator.api.routes.delineate_outlet", return_value=mock_watershed_low_res),
+        ):
+            routes.cache = WatershedCache(tmp_path / "cache.db")
+            routes.stats = routes.RequestStats()
+
+            app = create_app()
+            client = TestClient(app)
+
+            response = client.post(
+                "/delineate",
+                json={"gauge_id": "test-gauge", "lat": 40.0, "lng": -105.0, "force_low_res": True},
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["watershed"]["properties"]["resolution"] == "low_res"
+
+    def test_delineate_cache_isolation_by_resolution(self, test_client: TestClient) -> None:
+        """Same coordinates with different force_low_res values create different cache entries."""
+        # First POST with force_low_res=false (default) → cache miss
+        response1 = test_client.post(
+            "/delineate",
+            json={"gauge_id": "gauge-1", "lat": 40.0, "lng": -105.0},
+        )
+        assert response1.status_code == 200
+        assert response1.json()["cached"] is False
+
+        # Second POST with force_low_res=true → cache miss (different resolution)
+        # This needs custom mocking to return low_res watershed
+        # For this test, we'll verify the cache miss happens
+        # Note: Since test_client always returns high_res mock, we can't verify the resolution
+        # but we can verify that it's treated as a cache miss
+        response2 = test_client.post(
+            "/delineate",
+            json={"gauge_id": "gauge-2", "lat": 40.0, "lng": -105.0, "force_low_res": True},
+        )
+        assert response2.status_code == 200
+        # This should be a cache miss because resolution differs
+        assert response2.json()["cached"] is False
+
+        # Third POST with force_low_res=false again → cache hit
+        response3 = test_client.post(
+            "/delineate",
+            json={"gauge_id": "gauge-3", "lat": 40.0, "lng": -105.0},
+        )
+        assert response3.status_code == 200
+        assert response3.json()["cached"] is True
+
+    def test_delineate_invalid_force_low_res_type_rejected(self, test_client: TestClient) -> None:
+        """POST with force_low_res as object/list returns 400 validation error."""
+        # Pydantic coerces strings to booleans, but rejects objects/lists
+        response = test_client.post(
+            "/delineate",
+            json={"gauge_id": "test", "lat": 40.0, "lng": -105.0, "force_low_res": {"invalid": "object"}},
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert data["status"] == "error"
+        assert data["error_code"] == "INVALID_COORDINATES"
+        # Validation error should mention the field
+        assert "force_low_res" in data["error_message"]

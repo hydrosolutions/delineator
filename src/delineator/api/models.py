@@ -9,9 +9,11 @@ for data validation and serialization.
 from enum import Enum
 
 from pydantic import BaseModel, Field
-from shapely.geometry import mapping
+from shapely.geometry import MultiPolygon, Polygon, mapping
 
 from delineator.core.delineate import DelineatedWatershed
+
+DEFAULT_SIMPLIFY_TOLERANCE = 0.001  # ~100m at equator
 
 
 class ExportFormat(str, Enum):
@@ -28,6 +30,7 @@ class DelineateRequest(BaseModel):
     gauge_id: str
     lat: float = Field(ge=-90, le=90, description="Latitude in decimal degrees")
     lng: float = Field(ge=-180, le=180, description="Longitude in decimal degrees")
+    force_low_res: bool = Field(default=False, description="Force low-resolution delineation for faster results")
 
 
 class WatershedProperties(BaseModel):
@@ -67,6 +70,14 @@ class ErrorResponse(BaseModel):
     error_message: str
 
 
+def simplify_geometry(
+    geometry: Polygon | MultiPolygon,
+    tolerance: float = DEFAULT_SIMPLIFY_TOLERANCE,
+) -> Polygon | MultiPolygon:
+    """Simplify geometry to reduce vertex count while preserving topology."""
+    return geometry.simplify(tolerance, preserve_topology=True)
+
+
 def watershed_to_response(
     watershed: DelineatedWatershed,
     gauge_id: str,
@@ -84,7 +95,8 @@ def watershed_to_response(
         DelineateResponse with GeoJSON-formatted watershed feature
     """
     # Convert shapely geometry to GeoJSON dict
-    geometry_dict = mapping(watershed.geometry)
+    simplified = simplify_geometry(watershed.geometry)
+    geometry_dict = mapping(simplified)
 
     # Build the properties object
     properties = WatershedProperties(
