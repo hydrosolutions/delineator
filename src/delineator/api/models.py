@@ -94,7 +94,8 @@ def watershed_to_response(
         DelineateResponse with GeoJSON-formatted watershed feature
     """
     # Convert shapely geometry to GeoJSON dict
-    geometry_dict = mapping(watershed.geometry)
+    simplified = simplify_geometry(watershed.geometry)
+    geometry_dict = mapping(simplified)
 
     # Build the properties object
     properties = WatershedProperties(
