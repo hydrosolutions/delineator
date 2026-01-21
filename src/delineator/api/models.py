@@ -9,9 +9,11 @@ for data validation and serialization.
 from enum import Enum
 
 from pydantic import BaseModel, Field
-from shapely.geometry import mapping
+from shapely.geometry import MultiPolygon, Polygon, mapping
 
 from delineator.core.delineate import DelineatedWatershed
+
+DEFAULT_SIMPLIFY_TOLERANCE = 0.001  # ~100m at equator
 
 
 class ExportFormat(str, Enum):
@@ -65,6 +67,14 @@ class ErrorResponse(BaseModel):
     status: str = "error"
     error_code: str
     error_message: str
+
+
+def simplify_geometry(
+    geometry: Polygon | MultiPolygon,
+    tolerance: float = DEFAULT_SIMPLIFY_TOLERANCE,
+) -> Polygon | MultiPolygon:
+    """Simplify geometry to reduce vertex count while preserving topology."""
+    return geometry.simplify(tolerance, preserve_topology=True)
 
 
 def watershed_to_response(
