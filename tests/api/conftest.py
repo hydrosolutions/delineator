@@ -110,6 +110,32 @@ def mock_watershed() -> DelineatedWatershed:
 
 
 @pytest.fixture
+def mock_watershed_low_res() -> DelineatedWatershed:
+    """Mock watershed with low-resolution for testing force_low_res parameter."""
+    return DelineatedWatershed(
+        gauge_id="test-gauge-001",
+        gauge_name="Test Gauge",
+        gauge_lat=40.0,
+        gauge_lon=-105.0,
+        snap_lat=40.001,
+        snap_lon=-104.999,
+        snap_dist=150.5,
+        country="USA",
+        area=250.5,
+        geometry=Polygon(
+            [
+                (-105.05, 39.95),
+                (-104.95, 39.95),
+                (-104.95, 40.05),
+                (-105.05, 40.05),
+                (-105.05, 39.95),
+            ]
+        ),
+        resolution="low_res",
+    )
+
+
+@pytest.fixture
 def mock_complex_watershed() -> DelineatedWatershed:
     """Create a mock DelineatedWatershed with a high-vertex polygon (256+ vertices).
 
