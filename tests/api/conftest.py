@@ -13,7 +13,7 @@ import geopandas as gpd
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
-from shapely.geometry import LineString, Polygon, box
+from shapely.geometry import LineString, Point, Polygon, box
 
 from delineator.api import routes
 from delineator.api.cache import WatershedCache
@@ -105,6 +105,32 @@ def mock_watershed() -> DelineatedWatershed:
                 (-105.05, 39.95),
             ]
         ),
+        resolution="high_res",
+    )
+
+
+@pytest.fixture
+def mock_complex_watershed() -> DelineatedWatershed:
+    """Create a mock DelineatedWatershed with a high-vertex polygon (256+ vertices).
+
+    Uses Point.buffer() with resolution=64 to generate a 256-vertex polygon,
+    useful for testing geometry simplification.
+    """
+    # Create a circular polygon with 256+ vertices using buffer
+    # resolution=64 creates 64 points per quarter circle = 256 vertices
+    complex_geometry = Point(-105.0, 40.0).buffer(0.1, resolution=64)
+
+    return DelineatedWatershed(
+        gauge_id="complex-gauge-001",
+        gauge_name="Complex Gauge",
+        gauge_lat=40.0,
+        gauge_lon=-105.0,
+        snap_lat=40.0,
+        snap_lon=-105.0,
+        snap_dist=0.0,
+        country="USA",
+        area=100.0,
+        geometry=complex_geometry,
         resolution="high_res",
     )
 
