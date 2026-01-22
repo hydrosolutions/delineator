@@ -99,6 +99,86 @@ def collect_upstream_comids(
     return upstream_comids
 
 
+def calculate_stream_orders(
+    rivers_gdf: gpd.GeoDataFrame,
+) -> tuple[dict[int, int], dict[int, int]]:
+    """
+    Calculate Strahler and Shreve stream orders for a river network.
+
+    Uses topological sort to process nodes from headwaters downstream.
+
+    Strahler order rules:
+    - Headwater streams: order = 1
+    - When streams of different orders merge: max order
+    - When two or more streams of the same order merge: order + 1
+
+    Shreve order rules:
+    - Headwater streams: order = 1
+    - At confluences: sum of all upstream orders
+
+    Args:
+        rivers_gdf: GeoDataFrame indexed by COMID with up1, up2, up3, up4 columns.
+
+    Returns:
+        Tuple of (strahler_orders, shreve_orders) dicts mapping COMID -> order
+    """
+    if rivers_gdf.empty:
+        return {}, {}
+
+    # Build upstream lookup (COMID -> set of upstream COMIDs that exist in subset)
+    up_nodes: dict[int, set[int]] = {}
+    for comid in rivers_gdf.index:
+        upstream = set()
+        for col in ["up1", "up2", "up3", "up4"]:
+            up_id = rivers_gdf.loc[comid, col]
+            if up_id != 0 and up_id in rivers_gdf.index:
+                upstream.add(int(up_id))
+        up_nodes[comid] = upstream
+
+    # Build downstream lookup
+    downstream_of: dict[int, set[int]] = {comid: set() for comid in rivers_gdf.index}
+    for comid, upstream_set in up_nodes.items():
+        for up_comid in upstream_set:
+            downstream_of[up_comid].add(comid)
+
+    # Kahn's algorithm for topological sort
+    in_degree = {comid: len(upstream) for comid, upstream in up_nodes.items()}
+    queue = [comid for comid, deg in in_degree.items() if deg == 0]
+    topo_order = []
+
+    while queue:
+        node = queue.pop(0)
+        topo_order.append(node)
+        for downstream in downstream_of[node]:
+            in_degree[downstream] -= 1
+            if in_degree[downstream] == 0:
+                queue.append(downstream)
+
+    # Calculate stream orders
+    strahler: dict[int, int] = {}
+    shreve: dict[int, int] = {}
+
+    for comid in topo_order:
+        upstream_comids = up_nodes[comid]
+
+        if not upstream_comids:
+            strahler[comid] = 1
+            shreve[comid] = 1
+        else:
+            # Strahler
+            upstream_orders = [strahler[up] for up in upstream_comids]
+            max_order = max(upstream_orders)
+            if upstream_orders.count(max_order) >= 2:
+                strahler[comid] = max_order + 1
+            else:
+                strahler[comid] = max_order
+
+            # Shreve
+            shreve[comid] = sum(shreve[up] for up in upstream_comids)
+
+    return strahler, shreve
+
+
 def get_area(poly: Polygon | MultiPolygon) -> float:
     """
     Calculate area of polygon in km² using equal-area projection.
@@ -253,6 +333,11 @@ def delineate_outlet(
 
     # Extract river geometries if requested
     rivers = rivers_gdf.loc[upstream_comids].copy() if include_rivers else None
+
+    if rivers is not None and not rivers.empty:
+        strahler_orders, shreve_orders = calculate_stream_orders(rivers)
+        rivers["strahler_order"] = rivers.index.map(strahler_orders)
+        rivers["shreve_order"] = rivers.index.map(shreve_orders)
 
     # Get the upstream area from the rivers dataset
     upstream_area_km2 = rivers_gdf.loc[terminal_comid]["uparea"]

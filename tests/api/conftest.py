@@ -332,7 +332,12 @@ def mock_delineate_response_with_rivers() -> DelineateResponse:
                         "type": "LineString",
                         "coordinates": [[-105.0, 39.975], [-105.0, 40.015]],
                     },
-                    properties=RiverProperties(comid=41000001, uparea=500.0),
+                    properties=RiverProperties(
+                        comid=41000001,
+                        uparea=500.0,
+                        strahler_order=2,
+                        shreve_order=2,
+                    ),
                 ),
                 RiverFeature(
                     type="Feature",
@@ -340,7 +345,12 @@ def mock_delineate_response_with_rivers() -> DelineateResponse:
                         "type": "LineString",
                         "coordinates": [[-105.0, 40.025], [-105.0, 40.065]],
                     },
-                    properties=RiverProperties(comid=41000002, uparea=200.0),
+                    properties=RiverProperties(
+                        comid=41000002,
+                        uparea=200.0,
+                        strahler_order=1,
+                        shreve_order=1,
+                    ),
                 ),
             ],
         ),

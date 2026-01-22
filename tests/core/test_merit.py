@@ -163,25 +163,23 @@ class TestSplitCatchment:
         grid.view.return_value = catch_mask
 
         # Mock polygonize to return a single polygon shape
-        polygon_coords = [
-            [(-105.02, 39.98), (-104.98, 39.98), (-104.98, 40.02), (-105.02, 40.02), (-105.02, 39.98)]
-        ]
-        grid.polygonize.return_value = [
-            ({"type": "Polygon", "coordinates": [polygon_coords[0]]}, 1)
-        ]
+        polygon_coords = [[(-105.02, 39.98), (-104.98, 39.98), (-104.98, 40.02), (-105.02, 40.02), (-105.02, 39.98)]]
+        grid.polygonize.return_value = [({"type": "Polygon", "coordinates": [polygon_coords[0]]}, 1)]
 
         return grid
 
     @pytest.fixture
     def sample_catchment_poly(self) -> Polygon:
         """Create a sample catchment polygon."""
-        return Polygon([
-            (-105.05, 39.95),
-            (-104.95, 39.95),
-            (-104.95, 40.05),
-            (-105.05, 40.05),
-            (-105.05, 39.95),
-        ])
+        return Polygon(
+            [
+                (-105.05, 39.95),
+                (-104.95, 39.95),
+                (-104.95, 40.05),
+                (-105.05, 40.05),
+                (-105.05, 39.95),
+            ]
+        )
 
     def test_missing_fdir_file_raises(self, tmp_path: Path, sample_catchment_poly: Polygon) -> None:
         """Test that missing flow direction file raises FileNotFoundError."""
@@ -229,9 +227,7 @@ class TestSplitCatchment:
                     accum_dir=accum_dir,
                 )
 
-    def test_successful_delineation(
-        self, tmp_path: Path, sample_catchment_poly: Polygon, mock_grid: MagicMock
-    ) -> None:
+    def test_successful_delineation(self, tmp_path: Path, sample_catchment_poly: Polygon, mock_grid: MagicMock) -> None:
         """Test successful delineation returns polygon and coordinates."""
         fdir_dir = tmp_path / "fdir"
         accum_dir = tmp_path / "accum"
@@ -354,9 +350,7 @@ class TestSplitCatchment:
 
                 mock_threshold.assert_called_once_with(500.0, True)
 
-    def test_multipolygon_catchment_input(
-        self, tmp_path: Path, mock_grid: MagicMock
-    ) -> None:
+    def test_multipolygon_catchment_input(self, tmp_path: Path, mock_grid: MagicMock) -> None:
         """Test handling of MultiPolygon input (should use largest)."""
         fdir_dir = tmp_path / "fdir"
         accum_dir = tmp_path / "accum"
@@ -397,12 +391,8 @@ class TestSplitCatchment:
         (accum_dir / "accum41.tif").touch()
 
         # Mock polygonize to return multiple shapes
-        polygon_coords1 = [
-            [(-105.02, 39.98), (-105.00, 39.98), (-105.00, 40.00), (-105.02, 40.00), (-105.02, 39.98)]
-        ]
-        polygon_coords2 = [
-            [(-105.00, 40.00), (-104.98, 40.00), (-104.98, 40.02), (-105.00, 40.02), (-105.00, 40.00)]
-        ]
+        polygon_coords1 = [[(-105.02, 39.98), (-105.00, 39.98), (-105.00, 40.00), (-105.02, 40.00), (-105.02, 39.98)]]
+        polygon_coords2 = [[(-105.00, 40.00), (-104.98, 40.00), (-104.98, 40.02), (-105.00, 40.02), (-105.00, 40.00)]]
         mock_grid.polygonize.return_value = [
             ({"type": "Polygon", "coordinates": polygon_coords1}, 1),
             ({"type": "Polygon", "coordinates": polygon_coords2}, 1),

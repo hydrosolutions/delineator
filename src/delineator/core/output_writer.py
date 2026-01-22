@@ -196,6 +196,14 @@ class OutputWriter:
 
         Returns:
             GeoDataFrame with river geometries, or None if no rivers present
+
+        River attributes (if rivers present):
+            - gauge_id: str - ID of parent watershed
+            - comid: int - MERIT-Hydro COMID
+            - uparea: float - Upstream drainage area (km²)
+            - strahler_order: int | None - Strahler stream order
+            - shreve_order: int | None - Shreve stream order
+            - geometry: LineString - River reach geometry
         """
         import pandas as pd
 

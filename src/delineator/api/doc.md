@@ -63,6 +63,8 @@ description: HTTP API for watershed delineation, providing REST endpoints for th
 - `RiverProperties` - River reach attributes:
   - `comid: int` - MERIT-Hydro COMID (catchment identifier)
   - `uparea: float` - Upstream drainage area in km²
+  - `strahler_order: int | None` - Strahler stream order (1 = headwater)
+  - `shreve_order: int | None` - Shreve magnitude (sum of upstream orders)
 
 - `ErrorResponse` - Error response containing:
   - `gauge_id: str` - Gauge identifier from request

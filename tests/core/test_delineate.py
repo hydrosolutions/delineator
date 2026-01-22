@@ -349,7 +349,8 @@ class TestDelineateOutlet:
             patch(
                 "delineator.core.delineate.split_catchment",
                 return_value=(None, None, None),
-            ),pytest.raises(DelineationError, match="Raster-based delineation returned None")
+            ),
+            pytest.raises(DelineationError, match="Raster-based delineation returned None"),
         ):
             delineate_outlet(
                 gauge_id="fail_test",
@@ -725,3 +726,111 @@ class TestIncludeRivers:
         original_uparea = rivers.loc[41000001, "uparea"]
         result.rivers.loc[41000001, "uparea"] = 9999.0
         assert rivers.loc[41000001, "uparea"] == original_uparea
+
+
+class TestStreamOrder:
+    """Tests for stream order calculation."""
+
+    def test_single_headwater_has_order_one(
+        self,
+        single_catchment_network: tuple[gpd.GeoDataFrame, gpd.GeoDataFrame],
+    ) -> None:
+        """Single headwater reach should have Strahler=1 and Shreve=1."""
+        _, rivers = single_catchment_network
+        from delineator.core.delineate import calculate_stream_orders
+
+        strahler, shreve = calculate_stream_orders(rivers)
+        for comid in rivers.index:
+            assert strahler[comid] == 1
+            assert shreve[comid] == 1
+
+    def test_linear_chain_maintains_order_one(
+        self,
+        linear_network: tuple[gpd.GeoDataFrame, gpd.GeoDataFrame],
+    ) -> None:
+        """Linear chain (no branching) should have Strahler=1 throughout."""
+        _, rivers = linear_network
+        from delineator.core.delineate import calculate_stream_orders
+
+        strahler, shreve = calculate_stream_orders(rivers)
+        # All Strahler orders should be 1 (no same-order merges)
+        assert all(order == 1 for order in strahler.values())
+
+    def test_y_junction_increases_strahler(
+        self,
+        branching_network: tuple[gpd.GeoDataFrame, gpd.GeoDataFrame],
+    ) -> None:
+        """Y-shaped network: two order-1 streams merge -> order 2."""
+        _, rivers = branching_network
+        from delineator.core.delineate import calculate_stream_orders
+
+        strahler, shreve = calculate_stream_orders(rivers)
+        # Two tributaries are order 1
+        assert strahler[41000002] == 1
+        assert strahler[41000003] == 1
+        # Confluence is order 2
+        assert strahler[41000001] == 2
+        # Shreve: 1 + 1 = 2
+        assert shreve[41000001] == 2
+
+    def test_complex_network_strahler(
+        self,
+        complex_network: tuple[gpd.GeoDataFrame, gpd.GeoDataFrame],
+    ) -> None:
+        """Complex 7-node network has correct Strahler orders."""
+        _, rivers = complex_network
+        from delineator.core.delineate import calculate_stream_orders
+
+        strahler, shreve = calculate_stream_orders(rivers)
+        # 4 headwaters are order 1
+        assert strahler[41000004] == 1
+        assert strahler[41000005] == 1
+        assert strahler[41000006] == 1
+        assert strahler[41000007] == 1
+        # Middle nodes: two order-1 merge -> order 2
+        assert strahler[41000002] == 2
+        assert strahler[41000003] == 2
+        # Terminal: two order-2 merge -> order 3
+        assert strahler[41000001] == 3
+
+    def test_complex_network_shreve(
+        self,
+        complex_network: tuple[gpd.GeoDataFrame, gpd.GeoDataFrame],
+    ) -> None:
+        """Complex 7-node network: terminal Shreve = count of headwaters."""
+        _, rivers = complex_network
+        from delineator.core.delineate import calculate_stream_orders
+
+        strahler, shreve = calculate_stream_orders(rivers)
+        # Shreve at terminal = 4 (sum of all headwaters)
+        assert shreve[41000001] == 4
+
+    def test_delineate_includes_stream_order_columns(
+        self,
+        branching_network: tuple[gpd.GeoDataFrame, gpd.GeoDataFrame],
+        tmp_path: Path,
+    ) -> None:
+        """Delineation with include_rivers adds stream order columns."""
+        catchments, rivers = branching_network
+        fdir_dir = tmp_path / "fdir"
+        accum_dir = tmp_path / "accum"
+        fdir_dir.mkdir()
+        accum_dir.mkdir()
+
+        with patch("delineator.core.delineate.get_country", return_value="USA"):
+            result = delineate_outlet(
+                gauge_id="test",
+                lat=40.0,
+                lng=-105.0,
+                gauge_name="Test",
+                catchments_gdf=catchments,
+                rivers_gdf=rivers,
+                fdir_dir=fdir_dir,
+                accum_dir=accum_dir,
+                use_high_res=False,
+                include_rivers=True,
+            )
+
+        assert result.rivers is not None
+        assert "strahler_order" in result.rivers.columns
+        assert "shreve_order" in result.rivers.columns

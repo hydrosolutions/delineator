@@ -58,7 +58,8 @@ def rivers_to_geodataframe(response: DelineateResponse) -> gpd.GeoDataFrame | No
         response: The delineation response containing river features
 
     Returns:
-        GeoDataFrame with river geometries and attributes, or None if no rivers
+        GeoDataFrame with river geometries and attributes, or None if no rivers.
+        Attributes: comid, uparea, strahler_order, shreve_order
     """
     if response.rivers is None or not response.rivers.features:
         return None
@@ -72,6 +73,8 @@ def rivers_to_geodataframe(response: DelineateResponse) -> gpd.GeoDataFrame | No
             {
                 "comid": feature.properties.comid,
                 "uparea": feature.properties.uparea,
+                "strahler_order": feature.properties.strahler_order,
+                "shreve_order": feature.properties.shreve_order,
             }
         )
 

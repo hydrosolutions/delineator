@@ -70,9 +70,7 @@ class TestCloseHoles:
         large_hole = [(10, 10), (10, 15), (15, 15), (15, 10), (10, 10)]  # area = 25
         return Polygon(exterior, [small_hole, large_hole])
 
-    def test_fill_all_holes_with_zero_threshold(
-        self, polygon_with_small_hole: Polygon
-    ) -> None:
+    def test_fill_all_holes_with_zero_threshold(self, polygon_with_small_hole: Polygon) -> None:
         """area_max=0 should fill ALL holes."""
         result = close_holes(polygon_with_small_hole, area_max=0)
 
@@ -214,9 +212,7 @@ class TestDissolveGeopandas:
         # Should return a single geometry covering the 10x10 area
         assert len(result) == 1
 
-    def test_dissolve_overlapping_polygons(
-        self, overlapping_polygons: gpd.GeoDataFrame
-    ) -> None:
+    def test_dissolve_overlapping_polygons(self, overlapping_polygons: gpd.GeoDataFrame) -> None:
         """Overlapping polygons should merge into one."""
         result = dissolve_geopandas(overlapping_polygons)
 
@@ -225,9 +221,7 @@ class TestDissolveGeopandas:
         total_input_area = sum(g.area for g in overlapping_polygons.geometry)
         assert result.iloc[0].area < total_input_area
 
-    def test_dissolve_disjoint_polygons(
-        self, disjoint_polygons: gpd.GeoDataFrame
-    ) -> None:
+    def test_dissolve_disjoint_polygons(self, disjoint_polygons: gpd.GeoDataFrame) -> None:
         """Disjoint polygons should result in MultiPolygon or separate features."""
         result = dissolve_geopandas(disjoint_polygons)
 
@@ -251,9 +245,7 @@ class TestDissolveGeopandas:
 
         assert result.crs == adjacent_squares.crs
 
-    def test_result_is_valid_geometry(
-        self, overlapping_polygons: gpd.GeoDataFrame
-    ) -> None:
+    def test_result_is_valid_geometry(self, overlapping_polygons: gpd.GeoDataFrame) -> None:
         """Dissolved result should be valid geometry."""
         result = dissolve_geopandas(overlapping_polygons)
 

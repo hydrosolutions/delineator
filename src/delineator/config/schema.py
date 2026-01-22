@@ -130,9 +130,7 @@ class SettingsConfig(BaseModel):
     )
     max_fails: int | None = Field(default=DEFAULT_MAX_FAILS, description="Stop after N failures (None = unlimited)")
     fill_threshold: int = Field(
-        default=DEFAULT_FILL_THRESHOLD,
-        ge=0,
-        description="Fill polygon holes smaller than N pixels (0 = fill all)"
+        default=DEFAULT_FILL_THRESHOLD, ge=0, description="Fill polygon holes smaller than N pixels (0 = fill all)"
     )
 
     @field_validator("output_dir")

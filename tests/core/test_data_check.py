@@ -57,18 +57,14 @@ class TestGetExpectedFiles:
 
     def test_rasters_only(self, tmp_path: Path) -> None:
         """check_vectors=False should return only rasters."""
-        files = _get_expected_files(
-            basin=42, data_dir=tmp_path, check_rasters=True, check_vectors=False
-        )
+        files = _get_expected_files(basin=42, data_dir=tmp_path, check_rasters=True, check_vectors=False)
 
         assert len(files) == 2
         assert all("tif" in str(f) for f in files)
 
     def test_vectors_only(self, tmp_path: Path) -> None:
         """check_rasters=False should return only vectors."""
-        files = _get_expected_files(
-            basin=42, data_dir=tmp_path, check_rasters=False, check_vectors=True
-        )
+        files = _get_expected_files(basin=42, data_dir=tmp_path, check_rasters=False, check_vectors=True)
 
         assert len(files) == 2
         assert all("shp" in str(f) for f in files)

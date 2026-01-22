@@ -8,6 +8,7 @@ for data validation and serialization.
 
 from enum import Enum
 
+import pandas as pd
 from pydantic import BaseModel, Field
 from shapely.geometry import MultiPolygon, Polygon, mapping
 
@@ -58,6 +59,8 @@ class RiverProperties(BaseModel):
 
     comid: int
     uparea: float
+    strahler_order: int | None = None
+    shreve_order: int | None = None
 
 
 class RiverFeature(BaseModel):
@@ -147,9 +150,20 @@ def watershed_to_response(
         river_features = []
         for comid, row in watershed.rivers.iterrows():
             river_geom = mapping(row.geometry)
+
+            # Extract stream order if available
+            strahler = (
+                int(row["strahler_order"])
+                if "strahler_order" in row.index and pd.notna(row["strahler_order"])
+                else None
+            )
+            shreve = int(row["shreve_order"]) if "shreve_order" in row.index and pd.notna(row["shreve_order"]) else None
+
             river_props = RiverProperties(
                 comid=int(comid),
                 uparea=float(row["uparea"]),
+                strahler_order=strahler,
+                shreve_order=shreve,
             )
             river_features.append(
                 RiverFeature(

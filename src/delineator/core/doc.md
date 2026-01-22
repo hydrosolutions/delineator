@@ -19,6 +19,22 @@ This module contains core functionality and utilities needed throughout the deli
 
 ## Key Interfaces
 
+### Stream Order Calculation
+
+The module calculates two stream ordering systems for river networks:
+
+**Strahler Order:**
+- Headwater streams: order = 1
+- When two streams of the same order merge: order + 1
+- When different orders merge: keeps the higher order
+
+**Shreve Order (Magnitude):**
+- Headwater streams: order = 1
+- At confluences: sum of all upstream orders
+
+Key function:
+- `calculate_stream_orders(rivers_gdf)` - Returns (strahler_dict, shreve_dict) mapping COMID to order
+
 ### Data Availability Checking
 
 ```python

@@ -49,9 +49,8 @@ class TestGetCountry:
         with patch(
             "delineator.core.country.rg.search",
             side_effect=RuntimeError("Database error"),
-        ):
-            with pytest.raises(RuntimeError, match="Database error"):
-                get_country(lat=39.7392, lng=-104.9903)
+        ), pytest.raises(RuntimeError, match="Database error"):
+            get_country(lat=39.7392, lng=-104.9903)
 
     @pytest.mark.parametrize(
         "lat,lng,mock_cc,expected_name",
@@ -63,9 +62,7 @@ class TestGetCountry:
             (35.6762, 139.6503, "JP", "Tokyo"),  # Japan
         ],
     )
-    def test_various_locations(
-        self, lat: float, lng: float, mock_cc: str, expected_name: str
-    ) -> None:
+    def test_various_locations(self, lat: float, lng: float, mock_cc: str, expected_name: str) -> None:
         """Test country lookup for various global locations."""
         mock_results = [{"name": expected_name, "cc": mock_cc}]
 
