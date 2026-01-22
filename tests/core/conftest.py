@@ -40,10 +40,7 @@ def make_catchments_gdf(
     if sizes is None:
         sizes = [0.05] * len(comids)
 
-    geometries = [
-        make_catchment_polygon(lng, lat, size)
-        for (lng, lat), size in zip(centers, sizes, strict=True)
-    ]
+    geometries = [make_catchment_polygon(lng, lat, size) for (lng, lat), size in zip(centers, sizes, strict=True)]
 
     gdf = gpd.GeoDataFrame(
         {"unitarea": [100.0] * len(comids)},

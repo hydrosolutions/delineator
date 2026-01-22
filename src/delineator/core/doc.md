@@ -14,7 +14,7 @@ This module contains core functionality and utilities needed throughout the deli
 - `merit.py` - MERIT-Hydro raster operations for detailed watershed delineation
 - `dissolve.py` - Efficient polygon dissolve and hole-filling operations
 - `country.py` - Country extraction via offline reverse geocoding
-- `output_writer.py` - Output file writing for watersheds and failures (GeoPackage/Shapefile)
+- `output_writer.py` - Output file writing for watersheds and failures (GeoPackage/Shapefile) with optional river geometries
 - `delineate.py` - Main delineation algorithm and data structures
 
 ## Key Interfaces
@@ -286,7 +286,52 @@ Log messages include:
 - WARNING: Missing data when auto-download is disabled
 - ERROR: Download failures
 
-### Output Writing
+### Delineation Data Structures (`delineate.py`)
+
+```python
+@dataclass
+class DelineatedWatershed:
+    """Result from delineating a single watershed."""
+    gauge_id: str
+    gauge_name: str
+    gauge_lat: float
+    gauge_lon: float
+    snap_lat: float
+    snap_lon: float
+    snap_dist: float  # meters
+    country: str
+    area: float  # km²
+    geometry: Polygon | MultiPolygon
+    resolution: str  # "high_res" or "low_res"
+    rivers: gpd.GeoDataFrame | None = None  # River network geometries (optional)
+```
+
+The `rivers` field contains river network geometries when `include_rivers=True` in delineation. The GeoDataFrame includes:
+- COMID (index) - MERIT-Hydro catchment identifier
+- uparea - Upstream drainage area in km²
+- geometry - LineString of river reach centerline
+- Additional MERIT-Hydro river attributes (up1, up2, up3, up4 for network topology)
+
+```python
+def delineate_outlet(
+    gauge_id: str,
+    lat: float,
+    lng: float,
+    gauge_name: str,
+    catchments_gdf: gpd.GeoDataFrame,
+    rivers_gdf: gpd.GeoDataFrame,
+    fdir_dir: Path,
+    accum_dir: Path,
+    fill_threshold: int = 100,
+    use_high_res: bool = True,
+    high_res_area_limit: float = 10000.0,
+    include_rivers: bool = False,
+) -> DelineatedWatershed
+```
+
+Main delineation function. When `include_rivers=True`, the returned `DelineatedWatershed` includes river network geometries for all upstream river reaches in the watershed.
+
+### Output Writing (`output_writer.py`)
 
 ```python
 class OutputFormat(str, Enum):
@@ -303,8 +348,11 @@ class OutputWriter:
         self,
         output_dir: Path,
         output_format: OutputFormat = OutputFormat.GEOPACKAGE,
+        include_rivers: bool = False,
     ) -> None: ...
 ```
+
+The `include_rivers` parameter controls whether river network geometries are written to output files.
 
 Key methods:
 - `write_region_output(region_name, watersheds, mode="w")` - Write watersheds to GeoPackage/Shapefile
@@ -313,15 +361,31 @@ Key methods:
 - `load_failed_gauge_ids()` - Load gauge_ids from FAILED.csv (for --skip-failed)
 - `record_failure(region_name, gauge_id, lat, lng, error)` - Record a failed delineation
 - `finalize()` - Write FAILED.csv
+- `_build_rivers_geodataframe(watersheds)` - Combine river geometries from multiple watersheds into single GeoDataFrame
 
 Output structure (Hive-partitioned):
 ```
 output_dir/
 ├── REGION_NAME={name}/
-│   └── data_type=geopackage/  # or data_type=shapefiles
-│       └── {name}.gpkg        # or {name}_shapes.shp
+│   └── data_type=geopackage/          # or data_type=shapefiles
+│       ├── {name}.gpkg                 # GeoPackage with watershed + rivers layer
+│       │                               # or {name}_shapes.shp (watersheds)
+│       └── {name}_rivers.shp           # Separate shapefile for rivers (if Shapefile format)
 └── FAILED.csv
 ```
+
+#### River Output Behavior
+
+When `include_rivers=True`:
+- **GeoPackage**: Rivers written as separate "rivers" layer in the same .gpkg file (accessible via `layer="rivers"` in geopandas)
+- **Shapefile**: Rivers written as separate `{region_name}_rivers.shp` file in the same directory
+
+River attributes in output:
+- `gauge_id` - Links river reaches to their watershed
+- `COMID` - MERIT-Hydro catchment identifier
+- `uparea` - Upstream drainage area in km²
+- `geometry` - LineString of river reach centerline
+- Additional MERIT-Hydro river network attributes
 
 ## Dependencies
 

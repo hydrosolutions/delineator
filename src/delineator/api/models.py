@@ -31,6 +31,7 @@ class DelineateRequest(BaseModel):
     lat: float = Field(ge=-90, le=90, description="Latitude in decimal degrees")
     lng: float = Field(ge=-180, le=180, description="Longitude in decimal degrees")
     force_low_res: bool = Field(default=False, description="Force low-resolution delineation for faster results")
+    include_rivers: bool = Field(default=False, description="Include river network geometries in response")
 
 
 class WatershedProperties(BaseModel):
@@ -52,6 +53,28 @@ class WatershedFeature(BaseModel):
     properties: WatershedProperties
 
 
+class RiverProperties(BaseModel):
+    """GeoJSON properties for a river reach feature."""
+
+    comid: int
+    uparea: float
+
+
+class RiverFeature(BaseModel):
+    """GeoJSON Feature representing a river reach."""
+
+    type: str = "Feature"
+    geometry: dict
+    properties: RiverProperties
+
+
+class RiversFeatureCollection(BaseModel):
+    """GeoJSON FeatureCollection of river reaches."""
+
+    type: str = "FeatureCollection"
+    features: list[RiverFeature]
+
+
 class DelineateResponse(BaseModel):
     """Success response for watershed delineation."""
 
@@ -59,6 +82,7 @@ class DelineateResponse(BaseModel):
     status: str = "success"
     cached: bool
     watershed: WatershedFeature
+    rivers: RiversFeatureCollection | None = None
 
 
 class ErrorResponse(BaseModel):
@@ -82,6 +106,7 @@ def watershed_to_response(
     watershed: DelineatedWatershed,
     gauge_id: str,
     cached: bool,
+    include_rivers: bool = False,
 ) -> DelineateResponse:
     """
     Convert a DelineatedWatershed dataclass to a DelineateResponse.
@@ -90,6 +115,7 @@ def watershed_to_response(
         watershed: The delineated watershed dataclass
         gauge_id: Unique identifier for the gauge
         cached: Whether this result was retrieved from cache
+        include_rivers: Whether to include river geometries in the response
 
     Returns:
         DelineateResponse with GeoJSON-formatted watershed feature
@@ -115,10 +141,33 @@ def watershed_to_response(
         properties=properties,
     )
 
+    # Build rivers FeatureCollection if included
+    rivers_fc: RiversFeatureCollection | None = None
+    if include_rivers and watershed.rivers is not None:
+        river_features = []
+        for comid, row in watershed.rivers.iterrows():
+            river_geom = mapping(row.geometry)
+            river_props = RiverProperties(
+                comid=int(comid),
+                uparea=float(row["uparea"]),
+            )
+            river_features.append(
+                RiverFeature(
+                    type="Feature",
+                    geometry=river_geom,
+                    properties=river_props,
+                )
+            )
+        rivers_fc = RiversFeatureCollection(
+            type="FeatureCollection",
+            features=river_features,
+        )
+
     # Build the final response
     return DelineateResponse(
         gauge_id=gauge_id,
         status="success",
         cached=cached,
         watershed=feature,
+        rivers=rivers_fc,
     )

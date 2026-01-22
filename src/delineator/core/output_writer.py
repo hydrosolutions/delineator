@@ -61,6 +61,7 @@ class OutputWriter:
         self,
         output_dir: Path,
         output_format: OutputFormat = OutputFormat.GEOPACKAGE,
+        include_rivers: bool = False,
     ):
         """
         Initialize writer with output directory and format.
@@ -68,9 +69,11 @@ class OutputWriter:
         Args:
             output_dir: Base directory for all outputs
             output_format: Output format (GeoPackage or Shapefile)
+            include_rivers: Whether to include river geometries in output
         """
         self.output_dir = Path(output_dir)
         self.output_format = output_format
+        self.include_rivers = include_rivers
         self.failed_outlets: list[FailedOutlet] = []
 
     def get_region_output_dir(self, region_name: str) -> Path:
@@ -184,6 +187,35 @@ class OutputWriter:
 
         return gpd.GeoDataFrame(data, geometry=geometries, crs="EPSG:4326")
 
+    def _build_rivers_geodataframe(self, watersheds: list[DelineatedWatershed]) -> gpd.GeoDataFrame | None:
+        """
+        Combine river geometries from all watersheds into a single GeoDataFrame.
+
+        Args:
+            watersheds: List of delineated watersheds with optional rivers
+
+        Returns:
+            GeoDataFrame with river geometries, or None if no rivers present
+        """
+        import pandas as pd
+
+        river_gdfs = []
+        for ws in watersheds:
+            if ws.rivers is not None and not ws.rivers.empty:
+                # Add gauge_id to track which watershed each river belongs to
+                rivers_copy = ws.rivers.copy()
+                rivers_copy["gauge_id"] = ws.gauge_id
+                river_gdfs.append(rivers_copy)
+
+        if not river_gdfs:
+            return None
+
+        combined = gpd.GeoDataFrame(
+            pd.concat(river_gdfs, ignore_index=True),
+            crs="EPSG:4326",
+        )
+        return combined
+
     def write_region_output(
         self,
         region_name: str,
@@ -231,13 +263,22 @@ class OutputWriter:
         # Convert watersheds to GeoDataFrame
         gdf = self._build_geodataframe(watersheds)
 
+        # Build rivers GeoDataFrame if include_rivers is enabled
+        rivers_gdf = self._build_rivers_geodataframe(watersheds) if self.include_rivers else None
+
         if self.output_format == OutputFormat.GEOPACKAGE:
             # GeoPackage supports native append mode
             driver = "GPKG"
             if mode == "a" and output_path.exists():
                 gdf.to_file(output_path, driver=driver, mode="a")
+                # Append rivers to existing rivers layer if present
+                if rivers_gdf is not None:
+                    rivers_gdf.to_file(output_path, driver=driver, layer="rivers", mode="a")
             else:
                 gdf.to_file(output_path, driver=driver)
+                # Write rivers as separate layer
+                if rivers_gdf is not None:
+                    rivers_gdf.to_file(output_path, driver=driver, layer="rivers", mode="a")
         else:
             # Shapefile: use read-concat-write for append
             driver = "ESRI Shapefile"
@@ -250,6 +291,20 @@ class OutputWriter:
                     crs="EPSG:4326",
                 )
             gdf.to_file(output_path, driver=driver)
+
+            # Write rivers as separate shapefile
+            if rivers_gdf is not None:
+                rivers_path = output_path.parent / f"{region_name}_rivers.shp"
+                if mode == "a" and rivers_path.exists():
+                    import pandas as pd
+
+                    existing_rivers = gpd.read_file(rivers_path)
+                    rivers_gdf = gpd.GeoDataFrame(
+                        pd.concat([existing_rivers, rivers_gdf], ignore_index=True),
+                        crs="EPSG:4326",
+                    )
+                rivers_gdf.to_file(rivers_path, driver=driver)
+                logger.info(f"Successfully wrote rivers output: {rivers_path}")
 
         logger.info(f"Successfully wrote output: {output_path}")
         return output_path

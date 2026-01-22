@@ -129,6 +129,10 @@ def run_command(
         str,
         typer.Option("--file-format", help="Output file format: 'gpkg' (GeoPackage) or 'shp' (Shapefile)"),
     ] = "gpkg",
+    include_rivers: Annotated[
+        bool,
+        typer.Option("--include-rivers", help="Include river network geometries in output"),
+    ] = False,
 ) -> None:
     """
     Run watershed delineation for outlets defined in CONFIG_FILE.
@@ -334,7 +338,7 @@ def run_command(
 
         # Create output directories and writer
         output_dir_path.mkdir(parents=True, exist_ok=True)
-        writer = OutputWriter(output_dir_path, output_format=output_file_format)
+        writer = OutputWriter(output_dir_path, output_format=output_file_format, include_rivers=include_rivers)
 
         # Fail-safe check: error if outputs exist and neither --skip-existing nor --force
         if not skip_existing and not force:
@@ -439,6 +443,7 @@ def run_command(
                         accum_dir=accum_dir,
                         fill_threshold=config.settings.fill_threshold,
                         use_high_res=True,
+                        include_rivers=include_rivers,
                     )
 
                     region_watersheds.append(watershed)

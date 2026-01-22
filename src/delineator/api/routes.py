@@ -57,7 +57,7 @@ async def delineate(request: DelineateRequest) -> DelineateResponse:
     stats.total_requests += 1
 
     # Check cache first
-    cached_response = cache.get(request.lat, request.lng, request.force_low_res)
+    cached_response = cache.get(request.lat, request.lng, request.force_low_res, request.include_rivers)
     if cached_response is not None:
         stats.cache_hits += 1
         duration = time.time() - start_time
@@ -100,15 +100,18 @@ async def delineate(request: DelineateRequest) -> DelineateResponse:
             fdir_dir=fdir_dir,
             accum_dir=accum_dir,
             use_high_res=not request.force_low_res,
+            include_rivers=request.include_rivers,
         )
 
         watershed = await loop.run_in_executor(None, delineate_fn)
 
         # Convert to response
-        response = watershed_to_response(watershed, request.gauge_id, cached=False)
+        response = watershed_to_response(
+            watershed, request.gauge_id, cached=False, include_rivers=request.include_rivers
+        )
 
         # Store in cache
-        cache.put(request.lat, request.lng, request.gauge_id, response, request.force_low_res)
+        cache.put(request.lat, request.lng, request.gauge_id, response, request.force_low_res, request.include_rivers)
 
         # Log successful delineation
         duration = time.time() - start_time

@@ -52,6 +52,7 @@ class DelineatedWatershed:
     area: float  # km²
     geometry: Polygon | MultiPolygon
     resolution: str  # "high_res" or "low_res"
+    rivers: gpd.GeoDataFrame | None = None  # River network geometries
 
 
 @dataclass
@@ -199,6 +200,7 @@ def delineate_outlet(
     fill_threshold: int = 100,
     use_high_res: bool = True,
     high_res_area_limit: float = 10000.0,
+    include_rivers: bool = False,
 ) -> DelineatedWatershed:
     """
     Delineate watershed for a single outlet point.
@@ -222,6 +224,7 @@ def delineate_outlet(
         fill_threshold: Number of MERIT-Hydro pixels - holes smaller than this will be filled
         use_high_res: Whether to attempt high-resolution raster delineation
         high_res_area_limit: Switch to low-res mode for watersheds larger than this (km²)
+        include_rivers: Whether to include river network geometries in the result
 
     Returns:
         DelineatedWatershed with all attributes including geometry
@@ -247,6 +250,9 @@ def delineate_outlet(
     # Step 2: Trace upstream to find all contributing unit catchments
     upstream_comids = collect_upstream_comids(terminal_comid, rivers_gdf)
     logger.info(f"  Found {len(upstream_comids)} unit catchments in watershed")
+
+    # Extract river geometries if requested
+    rivers = rivers_gdf.loc[upstream_comids].copy() if include_rivers else None
 
     # Get the upstream area from the rivers dataset
     upstream_area_km2 = rivers_gdf.loc[terminal_comid]["uparea"]
@@ -365,4 +371,5 @@ def delineate_outlet(
         area=area_km2,
         geometry=basin_poly,
         resolution=resolution,
+        rivers=rivers,
     )

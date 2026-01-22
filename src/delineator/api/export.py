@@ -19,7 +19,7 @@ from delineator.api.models import DelineateResponse, ExportFormat
 
 def response_to_geodataframe(response: DelineateResponse) -> gpd.GeoDataFrame:
     """
-    Convert a DelineateResponse to a GeoDataFrame.
+    Convert a DelineateResponse watershed to a GeoDataFrame.
 
     Args:
         response: The delineation response containing watershed geometry and properties
@@ -50,9 +50,40 @@ def response_to_geodataframe(response: DelineateResponse) -> gpd.GeoDataFrame:
     return gdf
 
 
+def rivers_to_geodataframe(response: DelineateResponse) -> gpd.GeoDataFrame | None:
+    """
+    Convert rivers from a DelineateResponse to a GeoDataFrame.
+
+    Args:
+        response: The delineation response containing river features
+
+    Returns:
+        GeoDataFrame with river geometries and attributes, or None if no rivers
+    """
+    if response.rivers is None or not response.rivers.features:
+        return None
+
+    geometries = []
+    data = []
+
+    for feature in response.rivers.features:
+        geometries.append(shape(feature.geometry))
+        data.append(
+            {
+                "comid": feature.properties.comid,
+                "uparea": feature.properties.uparea,
+            }
+        )
+
+    return gpd.GeoDataFrame(data, geometry=geometries, crs="EPSG:4326")
+
+
 def export_geojson(response: DelineateResponse) -> bytes:
     """
     Export watershed as GeoJSON format.
+
+    If rivers are included in the response, they are combined with the watershed
+    into a single FeatureCollection.
 
     Args:
         response: The delineation response to export
@@ -60,8 +91,22 @@ def export_geojson(response: DelineateResponse) -> bytes:
     Returns:
         UTF-8 encoded GeoJSON bytes
     """
-    gdf = response_to_geodataframe(response)
-    geojson_str = gdf.to_json()
+
+    watershed_gdf = response_to_geodataframe(response)
+    rivers_gdf = rivers_to_geodataframe(response)
+
+    if rivers_gdf is not None:
+        # Combine watershed and rivers into a single FeatureCollection
+        import pandas as pd
+
+        combined_gdf = gpd.GeoDataFrame(
+            pd.concat([watershed_gdf, rivers_gdf], ignore_index=True),
+            crs="EPSG:4326",
+        )
+        geojson_str = combined_gdf.to_json()
+    else:
+        geojson_str = watershed_gdf.to_json()
+
     return geojson_str.encode("utf-8")
 
 
@@ -70,27 +115,34 @@ def export_shapefile_zip(response: DelineateResponse, gauge_id: str) -> bytes:
     Export watershed as a zipped Shapefile.
 
     Shapefile column names are limited to 10 characters, so snap_distance_m
-    is renamed to snap_dist_m.
+    is renamed to snap_dist_m. If rivers are included, a separate rivers
+    shapefile is added to the ZIP.
 
     Args:
         response: The delineation response to export
         gauge_id: Gauge identifier used for naming files
 
     Returns:
-        ZIP archive containing all shapefile components (.shp, .shx, .dbf, .prj, .cpg)
+        ZIP archive containing watershed shapefile and optionally rivers shapefile
     """
-    gdf = response_to_geodataframe(response)
+    watershed_gdf = response_to_geodataframe(response)
+    rivers_gdf = rivers_to_geodataframe(response)
 
     # Rename column to meet 10-character shapefile limit
-    gdf = gdf.rename(columns={"snap_distance_m": "snap_dist_m"})
+    watershed_gdf = watershed_gdf.rename(columns={"snap_distance_m": "snap_dist_m"})
 
     # Create temporary directory for shapefile components
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
         shp_path = tmpdir_path / f"{gauge_id}.shp"
 
-        # Write shapefile
-        gdf.to_file(shp_path, driver="ESRI Shapefile")
+        # Write watershed shapefile
+        watershed_gdf.to_file(shp_path, driver="ESRI Shapefile")
+
+        # Write rivers shapefile if present
+        if rivers_gdf is not None:
+            rivers_shp_path = tmpdir_path / f"{gauge_id}_rivers.shp"
+            rivers_gdf.to_file(rivers_shp_path, driver="ESRI Shapefile")
 
         # Create ZIP archive in memory
         zip_buffer = BytesIO()
@@ -98,6 +150,10 @@ def export_shapefile_zip(response: DelineateResponse, gauge_id: str) -> bytes:
             # Add all shapefile components to ZIP
             for file in tmpdir_path.glob(f"{gauge_id}.*"):
                 zipf.write(file, arcname=file.name)
+            # Add rivers shapefile components if present
+            if rivers_gdf is not None:
+                for file in tmpdir_path.glob(f"{gauge_id}_rivers.*"):
+                    zipf.write(file, arcname=file.name)
 
         return zip_buffer.getvalue()
 
@@ -106,6 +162,9 @@ def export_geopackage(response: DelineateResponse, gauge_id: str) -> bytes:
     """
     Export watershed as GeoPackage format.
 
+    If rivers are included in the response, they are written as a separate
+    'rivers' layer in the GeoPackage.
+
     Args:
         response: The delineation response to export
         gauge_id: Gauge identifier used for naming the file
@@ -113,15 +172,20 @@ def export_geopackage(response: DelineateResponse, gauge_id: str) -> bytes:
     Returns:
         GeoPackage file bytes
     """
-    gdf = response_to_geodataframe(response)
+    watershed_gdf = response_to_geodataframe(response)
+    rivers_gdf = rivers_to_geodataframe(response)
 
     # Create temporary file for GeoPackage
     with tempfile.NamedTemporaryFile(suffix=".gpkg", delete=False) as tmpfile:
         tmpfile_path = Path(tmpfile.name)
 
     try:
-        # Write GeoPackage
-        gdf.to_file(tmpfile_path, driver="GPKG", layer="watershed")
+        # Write watershed layer
+        watershed_gdf.to_file(tmpfile_path, driver="GPKG", layer="watershed")
+
+        # Write rivers layer if present
+        if rivers_gdf is not None:
+            rivers_gdf.to_file(tmpfile_path, driver="GPKG", layer="rivers", mode="a")
 
         # Read bytes
         with open(tmpfile_path, "rb") as f:

@@ -6,8 +6,8 @@ Uses tmp_path fixture for actual file operations and mock DelineatedWatershed ob
 
 import csv
 from pathlib import Path
-from unittest.mock import patch
 
+import geopandas as gpd
 import pytest
 from shapely.geometry import Polygon
 
@@ -128,9 +128,7 @@ class TestOutputWriter:
 
         assert result1 == result2
 
-    def test_write_region_shapefile_creates_file(
-        self, tmp_path: Path, sample_watershed: DelineatedWatershed
-    ) -> None:
+    def test_write_region_shapefile_creates_file(self, tmp_path: Path, sample_watershed: DelineatedWatershed) -> None:
         """Test that shapefile is created."""
         writer = OutputWriter(output_dir=tmp_path, output_format=OutputFormat.SHAPEFILE)
 
@@ -160,9 +158,7 @@ class TestOutputWriter:
         assert result.name == "test_region.gpkg"
         assert result.suffix == ".gpkg"
 
-    def test_write_region_shapefile_correct_path(
-        self, tmp_path: Path, sample_watershed: DelineatedWatershed
-    ) -> None:
+    def test_write_region_shapefile_correct_path(self, tmp_path: Path, sample_watershed: DelineatedWatershed) -> None:
         """Test that shapefile is written to Hive-partitioned path."""
         writer = OutputWriter(output_dir=tmp_path, output_format=OutputFormat.SHAPEFILE)
 
@@ -201,9 +197,7 @@ class TestOutputWriter:
         with pytest.raises(ValueError, match="no watersheds provided"):
             writer.write_region_shapefile(region_name="empty", watersheds=[])
 
-    def test_write_region_shapefile_attributes(
-        self, tmp_path: Path, sample_watershed: DelineatedWatershed
-    ) -> None:
+    def test_write_region_shapefile_attributes(self, tmp_path: Path, sample_watershed: DelineatedWatershed) -> None:
         """Test that all attributes are written correctly."""
         writer = OutputWriter(output_dir=tmp_path)
 
@@ -338,9 +332,7 @@ class TestFinalize:
 class TestIntegration:
     """Integration tests for full workflow."""
 
-    def test_full_workflow(
-        self, tmp_path: Path, multiple_watersheds: list[DelineatedWatershed]
-    ) -> None:
+    def test_full_workflow(self, tmp_path: Path, multiple_watersheds: list[DelineatedWatershed]) -> None:
         """Test complete workflow with successes and failures."""
         writer = OutputWriter(output_dir=tmp_path)
 
@@ -426,9 +418,7 @@ class TestCheckOutputExists:
 
         assert result is False
 
-    def test_returns_true_when_file_exists(
-        self, tmp_path: Path, sample_watershed: DelineatedWatershed
-    ) -> None:
+    def test_returns_true_when_file_exists(self, tmp_path: Path, sample_watershed: DelineatedWatershed) -> None:
         """Test that True is returned when output file exists."""
         writer = OutputWriter(output_dir=tmp_path)
 
@@ -470,9 +460,7 @@ class TestLoadFailedGaugeIds:
 class TestGeoPackageAppendMode:
     """Tests for GeoPackage append mode."""
 
-    def test_append_mode_adds_to_existing(
-        self, tmp_path: Path, multiple_watersheds: list[DelineatedWatershed]
-    ) -> None:
+    def test_append_mode_adds_to_existing(self, tmp_path: Path, multiple_watersheds: list[DelineatedWatershed]) -> None:
         """Test that append mode adds to existing GeoPackage."""
         writer = OutputWriter(output_dir=tmp_path)
 
@@ -490,9 +478,7 @@ class TestGeoPackageAppendMode:
         assert len(gdf) == 2
         assert set(gdf["gauge_id"]) == {"ws_001", "ws_002"}
 
-    def test_append_mode_creates_if_not_exists(
-        self, tmp_path: Path, sample_watershed: DelineatedWatershed
-    ) -> None:
+    def test_append_mode_creates_if_not_exists(self, tmp_path: Path, sample_watershed: DelineatedWatershed) -> None:
         """Test that append mode creates file if it doesn't exist."""
         writer = OutputWriter(output_dir=tmp_path)
 
@@ -506,3 +492,479 @@ class TestGeoPackageAppendMode:
 
         gdf = gpd.read_file(output_path)
         assert len(gdf) == 1
+
+
+class TestIncludeRiversOutput:
+    """Tests for rivers output in OutputWriter."""
+
+    @pytest.fixture
+    def watershed_with_rivers(self) -> DelineatedWatershed:
+        """Create a DelineatedWatershed with rivers GeoDataFrame."""
+        from shapely.geometry import LineString
+
+        # Create river geometries
+        rivers_gdf = gpd.GeoDataFrame(
+            {
+                "uparea": [500.0, 300.0, 100.0],
+                "up1": [41000002, 41000003, 0],
+                "up2": [0, 0, 0],
+                "up3": [0, 0, 0],
+                "up4": [0, 0, 0],
+            },
+            index=[41000001, 41000002, 41000003],
+            geometry=[
+                LineString([(-105.0, 39.975), (-105.0, 40.0)]),
+                LineString([(-105.0, 40.025), (-105.0, 40.05)]),
+                LineString([(-105.0, 40.075), (-105.0, 40.1)]),
+            ],
+            crs="EPSG:4326",
+        )
+        rivers_gdf.index.name = "COMID"
+
+        return DelineatedWatershed(
+            gauge_id="rivers_001",
+            gauge_name="Rivers Test Gauge",
+            gauge_lat=40.0,
+            gauge_lon=-105.0,
+            snap_lat=40.001,
+            snap_lon=-105.001,
+            snap_dist=100.0,
+            country="USA",
+            area=500.0,
+            geometry=Polygon([(-106, 40), (-105, 40), (-105, 41), (-106, 41)]),
+            resolution="low_res",
+            rivers=rivers_gdf,
+        )
+
+    @pytest.fixture
+    def watershed_without_rivers(self) -> DelineatedWatershed:
+        """Create a DelineatedWatershed without rivers (rivers=None)."""
+        return DelineatedWatershed(
+            gauge_id="no_rivers_001",
+            gauge_name="No Rivers Gauge",
+            gauge_lat=40.5,
+            gauge_lon=-105.5,
+            snap_lat=40.501,
+            snap_lon=-105.499,
+            snap_dist=150.0,
+            country="United States",
+            area=1234.5,
+            geometry=Polygon([(-106, 40), (-105, 40), (-105, 41), (-106, 41)]),
+            resolution="high_res",
+            rivers=None,
+        )
+
+    @pytest.fixture
+    def watershed_with_empty_rivers(self) -> DelineatedWatershed:
+        """Create a DelineatedWatershed with empty rivers GeoDataFrame."""
+        empty_rivers = gpd.GeoDataFrame(
+            columns=["uparea", "up1", "up2", "up3", "up4", "geometry"],
+            crs="EPSG:4326",
+        )
+        empty_rivers.index.name = "COMID"
+
+        return DelineatedWatershed(
+            gauge_id="empty_rivers_001",
+            gauge_name="Empty Rivers Gauge",
+            gauge_lat=41.0,
+            gauge_lon=-104.0,
+            snap_lat=41.001,
+            snap_lon=-104.001,
+            snap_dist=50.0,
+            country="USA",
+            area=200.0,
+            geometry=Polygon([(-105, 41), (-104, 41), (-104, 42), (-105, 42)]),
+            resolution="low_res",
+            rivers=empty_rivers,
+        )
+
+    def test_geopackage_with_rivers_layer(self, tmp_path: Path, watershed_with_rivers: DelineatedWatershed) -> None:
+        """GeoPackage should have both watershed and rivers layers."""
+        writer = OutputWriter(
+            output_dir=tmp_path,
+            output_format=OutputFormat.GEOPACKAGE,
+            include_rivers=True,
+        )
+
+        result_path = writer.write_region_output(
+            region_name="test_region",
+            watersheds=[watershed_with_rivers],
+        )
+
+        assert result_path.exists()
+        assert result_path.suffix == ".gpkg"
+
+        # Read the watershed layer (default layer)
+        gdf = gpd.read_file(result_path)
+        assert len(gdf) == 1
+        assert gdf.iloc[0]["gauge_id"] == "rivers_001"
+
+        # Read the rivers layer
+        import fiona
+
+        layers = fiona.listlayers(result_path)
+
+        assert "rivers" in layers
+
+        rivers_gdf = gpd.read_file(result_path, layer="rivers")
+        assert len(rivers_gdf) == 3
+        assert "uparea" in rivers_gdf.columns
+        assert "gauge_id" in rivers_gdf.columns  # Added by OutputWriter
+
+    def test_shapefile_with_separate_rivers_file(
+        self, tmp_path: Path, watershed_with_rivers: DelineatedWatershed
+    ) -> None:
+        """Should create {region}_rivers.shp alongside watershed shapefile."""
+        writer = OutputWriter(
+            output_dir=tmp_path,
+            output_format=OutputFormat.SHAPEFILE,
+            include_rivers=True,
+        )
+
+        result_path = writer.write_region_output(
+            region_name="test_region",
+            watersheds=[watershed_with_rivers],
+        )
+
+        assert result_path.exists()
+        assert result_path.name == "test_region_shapes.shp"
+
+        # Check that rivers shapefile was created
+        rivers_path = result_path.parent / "test_region_rivers.shp"
+        assert rivers_path.exists()
+
+        # Verify rivers shapefile content
+        rivers_gdf = gpd.read_file(rivers_path)
+        assert len(rivers_gdf) == 3
+        assert "uparea" in rivers_gdf.columns
+        assert "gauge_id" in rivers_gdf.columns
+
+    def test_backward_compatibility_without_rivers(
+        self, tmp_path: Path, watershed_without_rivers: DelineatedWatershed
+    ) -> None:
+        """When include_rivers=False, no rivers layer/file should be created."""
+        writer = OutputWriter(
+            output_dir=tmp_path,
+            output_format=OutputFormat.GEOPACKAGE,
+            include_rivers=False,  # Explicitly set to False
+        )
+
+        result_path = writer.write_region_output(
+            region_name="test_region",
+            watersheds=[watershed_without_rivers],
+        )
+
+        assert result_path.exists()
+
+        # Verify no rivers layer in GeoPackage
+        import fiona
+
+        layers = fiona.listlayers(result_path)
+        assert "rivers" not in layers
+
+    def test_include_rivers_false_ignores_watershed_rivers(
+        self, tmp_path: Path, watershed_with_rivers: DelineatedWatershed
+    ) -> None:
+        """When include_rivers=False, rivers in watershed should be ignored."""
+        writer = OutputWriter(
+            output_dir=tmp_path,
+            output_format=OutputFormat.GEOPACKAGE,
+            include_rivers=False,  # Rivers in watershed should be ignored
+        )
+
+        result_path = writer.write_region_output(
+            region_name="test_region",
+            watersheds=[watershed_with_rivers],  # This has rivers, but should be ignored
+        )
+
+        assert result_path.exists()
+
+        # Verify no rivers layer in GeoPackage
+        import fiona
+
+        layers = fiona.listlayers(result_path)
+        assert "rivers" not in layers
+
+    def test_empty_rivers_handled_gracefully_geopackage(
+        self, tmp_path: Path, watershed_with_empty_rivers: DelineatedWatershed
+    ) -> None:
+        """If watershed.rivers is empty GDF, handle gracefully (no rivers layer)."""
+        writer = OutputWriter(
+            output_dir=tmp_path,
+            output_format=OutputFormat.GEOPACKAGE,
+            include_rivers=True,
+        )
+
+        result_path = writer.write_region_output(
+            region_name="test_region",
+            watersheds=[watershed_with_empty_rivers],
+        )
+
+        assert result_path.exists()
+
+        # Verify watershed data was written
+        gdf = gpd.read_file(result_path)
+        assert len(gdf) == 1
+
+        # Empty rivers should result in no rivers layer
+        import fiona
+
+        layers = fiona.listlayers(result_path)
+        # The _build_rivers_geodataframe returns None if rivers is empty
+        assert "rivers" not in layers
+
+    def test_empty_rivers_handled_gracefully_shapefile(
+        self, tmp_path: Path, watershed_with_empty_rivers: DelineatedWatershed
+    ) -> None:
+        """If watershed.rivers is empty GDF, no rivers shapefile should be created."""
+        writer = OutputWriter(
+            output_dir=tmp_path,
+            output_format=OutputFormat.SHAPEFILE,
+            include_rivers=True,
+        )
+
+        result_path = writer.write_region_output(
+            region_name="test_region",
+            watersheds=[watershed_with_empty_rivers],
+        )
+
+        assert result_path.exists()
+
+        # Verify no rivers shapefile was created
+        rivers_path = result_path.parent / "test_region_rivers.shp"
+        assert not rivers_path.exists()
+
+    def test_multiple_watersheds_rivers_combined(
+        self,
+        tmp_path: Path,
+        watershed_with_rivers: DelineatedWatershed,
+    ) -> None:
+        """Rivers from multiple watersheds should be combined into one layer."""
+        from shapely.geometry import LineString
+
+        # Create a second watershed with different rivers
+        rivers_gdf2 = gpd.GeoDataFrame(
+            {
+                "uparea": [800.0, 400.0],
+                "up1": [42000002, 0],
+                "up2": [0, 0],
+                "up3": [0, 0],
+                "up4": [0, 0],
+            },
+            index=[42000001, 42000002],
+            geometry=[
+                LineString([(-104.0, 39.975), (-104.0, 40.0)]),
+                LineString([(-104.0, 40.025), (-104.0, 40.05)]),
+            ],
+            crs="EPSG:4326",
+        )
+        rivers_gdf2.index.name = "COMID"
+
+        watershed2 = DelineatedWatershed(
+            gauge_id="rivers_002",
+            gauge_name="Rivers Test Gauge 2",
+            gauge_lat=40.0,
+            gauge_lon=-104.0,
+            snap_lat=40.001,
+            snap_lon=-104.001,
+            snap_dist=100.0,
+            country="USA",
+            area=800.0,
+            geometry=Polygon([(-105, 40), (-104, 40), (-104, 41), (-105, 41)]),
+            resolution="low_res",
+            rivers=rivers_gdf2,
+        )
+
+        writer = OutputWriter(
+            output_dir=tmp_path,
+            output_format=OutputFormat.GEOPACKAGE,
+            include_rivers=True,
+        )
+
+        result_path = writer.write_region_output(
+            region_name="test_region",
+            watersheds=[watershed_with_rivers, watershed2],
+        )
+
+        assert result_path.exists()
+
+        # Read the rivers layer
+        rivers_gdf = gpd.read_file(result_path, layer="rivers")
+
+        # Should have 5 rivers total (3 from watershed1 + 2 from watershed2)
+        assert len(rivers_gdf) == 5
+
+        # Verify gauge_ids are present to track which watershed each river belongs to
+        gauge_ids = set(rivers_gdf["gauge_id"])
+        assert gauge_ids == {"rivers_001", "rivers_002"}
+
+    def test_mixed_watersheds_with_and_without_rivers(
+        self,
+        tmp_path: Path,
+        watershed_with_rivers: DelineatedWatershed,
+        watershed_without_rivers: DelineatedWatershed,
+    ) -> None:
+        """Mixed watersheds (some with rivers, some without) should work correctly."""
+        writer = OutputWriter(
+            output_dir=tmp_path,
+            output_format=OutputFormat.GEOPACKAGE,
+            include_rivers=True,
+        )
+
+        result_path = writer.write_region_output(
+            region_name="test_region",
+            watersheds=[watershed_with_rivers, watershed_without_rivers],
+        )
+
+        assert result_path.exists()
+
+        # Verify watershed data
+        gdf = gpd.read_file(result_path)
+        assert len(gdf) == 2
+
+        # Verify rivers layer only has rivers from watershed_with_rivers
+        rivers_gdf = gpd.read_file(result_path, layer="rivers")
+        assert len(rivers_gdf) == 3
+        assert all(rivers_gdf["gauge_id"] == "rivers_001")
+
+    def test_shapefile_rivers_append_mode(self, tmp_path: Path, watershed_with_rivers: DelineatedWatershed) -> None:
+        """Shapefile rivers should be appended correctly in append mode."""
+        from shapely.geometry import LineString
+
+        # Create a second watershed with different rivers
+        rivers_gdf2 = gpd.GeoDataFrame(
+            {
+                "uparea": [800.0],
+                "up1": [0],
+                "up2": [0],
+                "up3": [0],
+                "up4": [0],
+            },
+            index=[42000001],
+            geometry=[
+                LineString([(-104.0, 39.975), (-104.0, 40.0)]),
+            ],
+            crs="EPSG:4326",
+        )
+        rivers_gdf2.index.name = "COMID"
+
+        watershed2 = DelineatedWatershed(
+            gauge_id="rivers_002",
+            gauge_name="Rivers Test Gauge 2",
+            gauge_lat=40.0,
+            gauge_lon=-104.0,
+            snap_lat=40.001,
+            snap_lon=-104.001,
+            snap_dist=100.0,
+            country="USA",
+            area=800.0,
+            geometry=Polygon([(-105, 40), (-104, 40), (-104, 41), (-105, 41)]),
+            resolution="low_res",
+            rivers=rivers_gdf2,
+        )
+
+        writer = OutputWriter(
+            output_dir=tmp_path,
+            output_format=OutputFormat.SHAPEFILE,
+            include_rivers=True,
+        )
+
+        # First write
+        writer.write_region_output(
+            region_name="test_region",
+            watersheds=[watershed_with_rivers],
+            mode="w",
+        )
+
+        # Append second watershed
+        result_path = writer.write_region_output(
+            region_name="test_region",
+            watersheds=[watershed2],
+            mode="a",
+        )
+
+        # Verify rivers were appended
+        rivers_path = result_path.parent / "test_region_rivers.shp"
+        rivers_gdf = gpd.read_file(rivers_path)
+
+        assert len(rivers_gdf) == 4  # 3 from first + 1 from second
+
+    def test_geopackage_rivers_append_mode(self, tmp_path: Path, watershed_with_rivers: DelineatedWatershed) -> None:
+        """GeoPackage rivers should be appended correctly in append mode."""
+        from shapely.geometry import LineString
+
+        # Create a second watershed with different rivers
+        rivers_gdf2 = gpd.GeoDataFrame(
+            {
+                "uparea": [800.0],
+                "up1": [0],
+                "up2": [0],
+                "up3": [0],
+                "up4": [0],
+            },
+            index=[42000001],
+            geometry=[
+                LineString([(-104.0, 39.975), (-104.0, 40.0)]),
+            ],
+            crs="EPSG:4326",
+        )
+        rivers_gdf2.index.name = "COMID"
+
+        watershed2 = DelineatedWatershed(
+            gauge_id="rivers_002",
+            gauge_name="Rivers Test Gauge 2",
+            gauge_lat=40.0,
+            gauge_lon=-104.0,
+            snap_lat=40.001,
+            snap_lon=-104.001,
+            snap_dist=100.0,
+            country="USA",
+            area=800.0,
+            geometry=Polygon([(-105, 40), (-104, 40), (-104, 41), (-105, 41)]),
+            resolution="low_res",
+            rivers=rivers_gdf2,
+        )
+
+        writer = OutputWriter(
+            output_dir=tmp_path,
+            output_format=OutputFormat.GEOPACKAGE,
+            include_rivers=True,
+        )
+
+        # First write
+        writer.write_region_output(
+            region_name="test_region",
+            watersheds=[watershed_with_rivers],
+            mode="w",
+        )
+
+        # Append second watershed
+        result_path = writer.write_region_output(
+            region_name="test_region",
+            watersheds=[watershed2],
+            mode="a",
+        )
+
+        # Verify rivers were appended
+        rivers_gdf = gpd.read_file(result_path, layer="rivers")
+        assert len(rivers_gdf) == 4  # 3 from first + 1 from second
+
+    def test_include_rivers_init_parameter(self, tmp_path: Path) -> None:
+        """Test that include_rivers parameter is correctly stored."""
+        writer_with = OutputWriter(
+            output_dir=tmp_path,
+            output_format=OutputFormat.GEOPACKAGE,
+            include_rivers=True,
+        )
+        assert writer_with.include_rivers is True
+
+        writer_without = OutputWriter(
+            output_dir=tmp_path,
+            output_format=OutputFormat.GEOPACKAGE,
+            include_rivers=False,
+        )
+        assert writer_without.include_rivers is False
+
+        # Default should be False
+        writer_default = OutputWriter(output_dir=tmp_path)
+        assert writer_default.include_rivers is False

@@ -41,7 +41,11 @@ Main watershed delineation command that:
 2. Loads outlets from region-specific TOML files
 3. Determines required MERIT basins
 4. Checks/downloads data availability
-5. Processes outlets and generates watershed shapefiles (TODO: Phase 4)
+5. Processes outlets and generates watershed output files
+
+When `--include-rivers` is enabled, river network geometries are included in output:
+- **GeoPackage** - Rivers written as separate "rivers" layer in the same .gpkg file
+- **Shapefile** - Rivers written as separate `{region_name}_rivers.shp` file in the same directory
 
 Options:
 - `--output/-o`: Override output directory
@@ -52,6 +56,7 @@ Options:
 - `--output-format`: text or json output
 - `--quiet/-q`: Suppress progress
 - `--verbose/-v`: Debug logging
+- `--include-rivers`: Include river network geometries in output files
 
 ### `delineator download`
 

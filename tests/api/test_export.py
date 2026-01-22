@@ -351,3 +351,119 @@ class TestExportEndpoint:
             data = json.loads(response.content)
             assert data["type"] == "FeatureCollection"
             assert len(data["features"]) == 1
+
+
+class TestExportWithRivers:
+    """Tests for exporting watersheds with river geometries."""
+
+    def test_export_geojson_with_rivers(
+        self,
+        test_client: TestClient,
+        mock_delineate_response_with_rivers,
+    ) -> None:
+        """GeoJSON export includes rivers when present in response."""
+        # Populate cache with response containing rivers
+        routes.cache.put(
+            lat=40.001,
+            lng=-104.999,
+            gauge_id="rivers-test-001",
+            response=mock_delineate_response_with_rivers,
+            include_rivers=True,
+        )
+
+        # Export as GeoJSON
+        response = test_client.get("/export/rivers-test-001?format=geojson")
+
+        assert response.status_code == 200
+        data = json.loads(response.content)
+
+        # Should have watershed + river features
+        assert data["type"] == "FeatureCollection"
+        assert len(data["features"]) == 3  # 1 watershed + 2 rivers
+
+        # Verify we have both polygon (watershed) and linestring (river) features
+        geom_types = [f["geometry"]["type"] for f in data["features"]]
+        assert "Polygon" in geom_types
+        assert "LineString" in geom_types
+
+    def test_export_shapefile_with_rivers(
+        self,
+        test_client: TestClient,
+        mock_delineate_response_with_rivers,
+    ) -> None:
+        """Shapefile export includes separate rivers shapefile."""
+        # Populate cache with response containing rivers
+        routes.cache.put(
+            lat=40.001,
+            lng=-104.999,
+            gauge_id="rivers-test-002",
+            response=mock_delineate_response_with_rivers,
+            include_rivers=True,
+        )
+
+        # Export as shapefile
+        response = test_client.get("/export/rivers-test-002?format=shapefile")
+
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/zip"
+
+        # Check ZIP contents for rivers shapefile
+        zip_buffer = BytesIO(response.content)
+        with zipfile.ZipFile(zip_buffer, "r") as zf:
+            filenames = zf.namelist()
+
+            # Verify main shapefile exists
+            assert "rivers-test-002.shp" in filenames
+
+            # Verify rivers shapefile exists
+            assert "rivers-test-002_rivers.shp" in filenames
+            assert "rivers-test-002_rivers.dbf" in filenames
+
+    def test_export_geopackage_with_rivers(
+        self,
+        test_client: TestClient,
+        mock_delineate_response_with_rivers,
+    ) -> None:
+        """GeoPackage export includes rivers layer."""
+        # Populate cache with response containing rivers
+        routes.cache.put(
+            lat=40.001,
+            lng=-104.999,
+            gauge_id="rivers-test-003",
+            response=mock_delineate_response_with_rivers,
+            include_rivers=True,
+        )
+
+        # Export as GeoPackage
+        response = test_client.get("/export/rivers-test-003?format=geopackage")
+
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/geopackage+sqlite3"
+
+        # Verify it's a valid GeoPackage (SQLite file)
+        assert response.content.startswith(b"SQLite format 3")
+
+    def test_export_without_rivers_unchanged(
+        self,
+        test_client: TestClient,
+        mock_delineate_response,
+    ) -> None:
+        """Export without rivers behaves as before."""
+        # Populate cache with response without rivers
+        routes.cache.put(
+            lat=40.001,
+            lng=-104.999,
+            gauge_id="no-rivers-test",
+            response=mock_delineate_response,
+        )
+
+        # Export as GeoJSON
+        response = test_client.get("/export/no-rivers-test?format=geojson")
+
+        assert response.status_code == 200
+        data = json.loads(response.content)
+
+        # Should only have watershed feature
+        assert data["type"] == "FeatureCollection"
+        assert len(data["features"]) == 1
+        assert data["features"][0]["geometry"]["type"] == "Polygon"

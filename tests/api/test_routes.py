@@ -421,3 +421,99 @@ class TestForceLowRes:
         assert data["error_code"] == "INVALID_COORDINATES"
         # Validation error should mention the field
         assert "force_low_res" in data["error_message"]
+
+
+class TestIncludeRivers:
+    """Tests for include_rivers parameter in /delineate endpoint."""
+
+    def test_delineate_without_include_rivers_excludes_rivers(self, test_client: TestClient) -> None:
+        """POST request without include_rivers returns response without rivers."""
+        response = test_client.post(
+            "/delineate",
+            json={"gauge_id": "test-gauge", "lat": 40.0, "lng": -105.0},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        # Rivers should be null when not requested
+        assert data.get("rivers") is None
+
+    def test_delineate_with_include_rivers_true_returns_rivers(
+        self,
+        mock_basin_data,
+        mock_watershed_with_rivers,
+        tmp_path,
+    ) -> None:
+        """POST request with include_rivers=true returns rivers FeatureCollection."""
+        with (
+            patch("delineator.api.routes.get_basin_for_point", return_value=mock_basin_data),
+            patch("delineator.api.routes.get_data_dir", return_value=tmp_path),
+            patch("delineator.api.routes.delineate_outlet", return_value=mock_watershed_with_rivers),
+        ):
+            routes.cache = WatershedCache(tmp_path / "cache.db")
+            routes.stats = routes.RequestStats()
+
+            app = create_app()
+            client = TestClient(app)
+
+            response = client.post(
+                "/delineate",
+                json={"gauge_id": "test-gauge", "lat": 40.0, "lng": -105.0, "include_rivers": True},
+            )
+            assert response.status_code == 200
+            data = response.json()
+
+            # Rivers should be present as FeatureCollection
+            assert data["rivers"] is not None
+            assert data["rivers"]["type"] == "FeatureCollection"
+            assert len(data["rivers"]["features"]) == 2
+
+            # Verify river feature structure
+            feature = data["rivers"]["features"][0]
+            assert feature["type"] == "Feature"
+            assert feature["geometry"]["type"] == "LineString"
+            assert "comid" in feature["properties"]
+            assert "uparea" in feature["properties"]
+
+    def test_delineate_cache_isolation_by_include_rivers(self, test_client: TestClient) -> None:
+        """Same coordinates with different include_rivers values create different cache entries."""
+        # First POST without include_rivers → cache miss
+        response1 = test_client.post(
+            "/delineate",
+            json={"gauge_id": "gauge-1", "lat": 40.0, "lng": -105.0},
+        )
+        assert response1.status_code == 200
+        assert response1.json()["cached"] is False
+
+        # Second POST with include_rivers=true → cache miss (different key)
+        response2 = test_client.post(
+            "/delineate",
+            json={"gauge_id": "gauge-2", "lat": 40.0, "lng": -105.0, "include_rivers": True},
+        )
+        assert response2.status_code == 200
+        assert response2.json()["cached"] is False
+
+        # Third POST without include_rivers again → cache hit
+        response3 = test_client.post(
+            "/delineate",
+            json={"gauge_id": "gauge-3", "lat": 40.0, "lng": -105.0},
+        )
+        assert response3.status_code == 200
+        assert response3.json()["cached"] is True
+
+        # Fourth POST with include_rivers=true again → cache hit
+        response4 = test_client.post(
+            "/delineate",
+            json={"gauge_id": "gauge-4", "lat": 40.0, "lng": -105.0, "include_rivers": True},
+        )
+        assert response4.status_code == 200
+        assert response4.json()["cached"] is True
+
+    def test_delineate_include_rivers_false_explicit(self, test_client: TestClient) -> None:
+        """POST with include_rivers=false explicitly returns no rivers."""
+        response = test_client.post(
+            "/delineate",
+            json={"gauge_id": "test-gauge", "lat": 40.0, "lng": -105.0, "include_rivers": False},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data.get("rivers") is None
