@@ -11,6 +11,7 @@ reduces memory usage and processing time.
 """
 
 import logging
+import time
 from pathlib import Path
 
 import numpy as np
@@ -113,6 +114,7 @@ def split_catchment(
     5. Performs raster-based catchment delineation using pysheds
     6. Converts the resulting raster catchment to a polygon
     """
+    t_total = time.perf_counter()
     # Get a bounding box for the unit catchment
     bounds = catchment_poly.bounds
     bounds_list = [float(i) for i in bounds]
@@ -148,8 +150,10 @@ def split_catchment(
         raise FileNotFoundError(f"Could not find flow direction raster: {fdir_fname}")
 
     # Load the grid and flow direction data
+    t0 = time.perf_counter()
     grid = Grid.from_raster(str(fdir_fname), window=bounding_box, nodata=0)
     fdir = grid.read_raster(str(fdir_fname), window=bounding_box, nodata=0)
+    logger.info(f"  [load_fdir] {time.perf_counter() - t0:.3f}s")
 
     # Now "clip" the rectangular flow direction grid even further so that it ONLY contains data
     # inside the boundaries of the terminal unit catchment.
@@ -171,15 +175,13 @@ def split_catchment(
     polygon_list = list(multi_poly.geoms)
 
     # Convert the polygon into a pixelized raster "mask"
+    t0 = time.perf_counter()
     mymask = grid.rasterize(polygon_list)
 
     # Zero out flow direction values outside the mask
     # This makes the plots look nicer and ensures we only consider pixels inside the catchment
-    m, n = grid.shape
-    for i in range(m):
-        for j in range(n):
-            if int(mymask[i, j]) == 0:
-                fdir[i, j] = 0
+    fdir[mymask == 0] = 0
+    logger.info(f"  [mask_fdir] {time.perf_counter() - t0:.3f}s")
 
     # MERIT-Hydro flow direction uses the old ESRI standard for flow direction
     dirmap = (64, 128, 1, 2, 4, 8, 16, 32)
@@ -191,10 +193,13 @@ def split_catchment(
     if not accum_fname.is_file():
         raise FileNotFoundError(f"Could not find accumulation raster: {accum_fname}")
 
+    t0 = time.perf_counter()
     acc = grid.read_raster(str(accum_fname), data_name="acc", window=bounding_box, window_crs=grid.crs, nodata=0)
+    logger.info(f"  [load_accum] {time.perf_counter() - t0:.3f}s")
 
     # Clip the flow direction grid to a new rectangular bounding box
     # that corresponds to the mask of the unit catchment
+    t0 = time.perf_counter()
     grid.clip_to(mymask)
 
     # MASK the accumulation raster to the unit catchment POLYGON. Set any pixel that is not
@@ -202,11 +207,8 @@ def split_catchment(
     # inside our polygon for the unit catchment, and will not accidentally snap
     # to a neighboring watershed. This is the key to getting good results in small watersheds,
     # especially when there are other streams nearby.
-    m, n = grid.shape
-    for i in range(m):
-        for j in range(n):
-            if int(mymask[i, j]) == 0:
-                acc[i, j] = 0
+    acc[mymask == 0] = 0
+    logger.info(f"  [mask_accum] {time.perf_counter() - t0:.3f}s")
 
     # Snap the outlet to the nearest stream. This function depends entirely on the threshold
     # for the minimum number of upstream pixels to define a waterway.
@@ -218,16 +220,19 @@ def split_catchment(
 
     # Snap the pour point to a point on the accumulation grid where accum (# of upstream pixels)
     # is greater than our threshold
+    t0 = time.perf_counter()
     streams = acc > numpixels
     xy = (lng, lat)
     try:
         lng_snap, lat_snap = grid.snap_to_mask(streams, xy)
+        logger.info(f"  [snap_to_stream] {time.perf_counter() - t0:.3f}s")
     except Exception as e:
         logger.error(f"Could not snap the pour point. Error: {e}")
         return None, None, None
 
     # Finally, here is the raster based watershed delineation with pysheds!
     logger.info("Delineating catchment")
+    t0 = time.perf_counter()
     try:
         catch = grid.catchment(
             fdir=fdir, x=lng_snap, y=lat_snap, dirmap=dirmap, xytype="coordinate", recursionlimit=15000
@@ -237,12 +242,14 @@ def split_catchment(
         # Seems optional, but turns out this line is essential
         grid.clip_to(catch)
         clipped_catch = grid.view(catch, dtype=np.uint8)
+        logger.info(f"  [catchment_delineation] {time.perf_counter() - t0:.3f}s")
     except Exception as e:
         logger.error(f"ERROR: something went wrong during pysheds grid.catchment(). Error: {e}")
         return None, lng_snap, lat_snap
 
     # Convert high-precision raster subcatchment to a polygon using pysheds method .polygonize()
     logger.info("Converting to polygon")
+    t0 = time.perf_counter()
     shapes = grid.polygonize(clipped_catch)
 
     # The output from pysheds can create MANY shapes.
@@ -283,6 +290,8 @@ def split_catchment(
         # If pysheds generated a single polygon, that is our answer
         result_polygon = shapely_polygons[0]
 
+    logger.info(f"  [polygonize] {time.perf_counter() - t0:.3f}s")
+    logger.info(f"  [split_catchment total] {time.perf_counter() - t_total:.3f}s")
     return result_polygon, lat_snap, lng_snap
 
 

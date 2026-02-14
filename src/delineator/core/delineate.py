@@ -15,6 +15,7 @@ with the precision of raster methods for the downstream terminal catchment.
 """
 
 import logging
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -313,8 +314,10 @@ def delineate_outlet(
         DelineationError: If delineation fails at any step
     """
     logger.info(f"Delineating watershed for gauge {gauge_id} at ({lat}, {lng})")
+    t_total = time.perf_counter()
 
     # Step 1: Find the terminal unit catchment that contains the outlet point
+    t0 = time.perf_counter()
     outlet_point = Point(lng, lat)
     point_gdf = gpd.GeoDataFrame(geometry=[outlet_point], crs="EPSG:4326")
 
@@ -326,18 +329,23 @@ def delineate_outlet(
 
     terminal_comid = joined.iloc[0]["COMID"]
     logger.info(f"  Terminal unit catchment COMID: {terminal_comid}")
+    logger.info(f"  [find_terminal] {time.perf_counter() - t0:.3f}s")
 
     # Step 2: Trace upstream to find all contributing unit catchments
+    t0 = time.perf_counter()
     upstream_comids = collect_upstream_comids(terminal_comid, rivers_gdf)
     logger.info(f"  Found {len(upstream_comids)} unit catchments in watershed")
+    logger.info(f"  [trace_upstream] {time.perf_counter() - t0:.3f}s")
 
     # Extract river geometries if requested
     rivers = rivers_gdf.loc[upstream_comids].copy() if include_rivers else None
 
     if rivers is not None and not rivers.empty:
+        t0 = time.perf_counter()
         strahler_orders, shreve_orders = calculate_stream_orders(rivers)
         rivers["strahler_order"] = rivers.index.map(strahler_orders)
         rivers["shreve_order"] = rivers.index.map(shreve_orders)
+        logger.info(f"  [stream_orders] {time.perf_counter() - t0:.3f}s")
 
     # Get the upstream area from the rivers dataset
     upstream_area_km2 = rivers_gdf.loc[terminal_comid]["uparea"]
@@ -380,6 +388,7 @@ def delineate_outlet(
 
         # Call split_catchment to perform detailed delineation
         try:
+            t0 = time.perf_counter()
             split_poly, lat_snap, lng_snap = split_catchment(
                 basin=basin,
                 lat=lat,
@@ -398,6 +407,7 @@ def delineate_outlet(
             subbasins_gdf.loc[terminal_comid, "geometry"] = split_poly
 
             resolution = "high_res"
+            logger.info(f"  [split_catchment] {time.perf_counter() - t0:.3f}s")
 
         except Exception as e:
             raise DelineationError(f"Raster-based delineation failed: {e}") from e
@@ -417,20 +427,26 @@ def delineate_outlet(
 
     # Step 5: Dissolve all unit catchments into a single polygon
     logger.info("  Dissolving unit catchments")
+    t0 = time.perf_counter()
     mybasin_gs = dissolve_geopandas(subbasins_gdf)
+    logger.info(f"  [dissolve] {time.perf_counter() - t0:.3f}s")
 
     # Step 6: Fill small holes in the watershed polygon
     # Convert fill_threshold (in pixels) to area in square decimal degrees
     PIXEL_AREA = 0.000000695  # Area of a single MERIT-Hydro pixel in decimal degrees
     area_max = fill_threshold * PIXEL_AREA
+    t0 = time.perf_counter()
     mybasin_gs = fill_geopandas(mybasin_gs, area_max=area_max)
+    logger.info(f"  [fill_holes] {time.perf_counter() - t0:.3f}s")
 
     # Extract the final watershed polygon
     basin_poly = mybasin_gs.iloc[0]
 
     # Step 7: Calculate final area
+    t0 = time.perf_counter()
     area_km2 = get_area(basin_poly)
     logger.info(f"  Final delineated area: {area_km2:.1f} km²")
+    logger.info(f"  [calc_area] {time.perf_counter() - t0:.3f}s")
 
     # Step 8: Calculate snap distance (how far the outlet was moved)
     geod = pyproj.Geod(ellps="WGS84")
@@ -444,6 +460,7 @@ def delineate_outlet(
         country = "Unknown"
 
     # Step 10: Return the result
+    logger.info(f"  [delineate_outlet total] {time.perf_counter() - t_total:.3f}s")
     return DelineatedWatershed(
         gauge_id=gauge_id,
         gauge_name=gauge_name,
